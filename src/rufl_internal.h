@@ -6,7 +6,7 @@
  */
 
 #include <limits.h>
-#include "oslib/font.h"
+#include <oslib/font.h>
 #include "rufl.h"
 #ifdef __CC_NORCROFT
 #include "strfuncs.h"

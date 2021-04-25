@@ -5,7 +5,7 @@
  * Copyright 2005 James Bursa <james@semichrome.net>
  */
 
-#include "oslib/font.h"
+#include <oslib/font.h>
 #include "rufl_internal.h"
 
 

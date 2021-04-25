@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include "oslib/font.h"
+#include <oslib/font.h>
 #include "rufl_internal.h"
 
 

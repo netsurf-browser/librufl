@@ -8,7 +8,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "oslib/font.h"
+#include <oslib/font.h>
 
 #include "rufl_internal.h"
 
