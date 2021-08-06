@@ -151,22 +151,28 @@ bool rufl_character_set_test(struct rufl_character_set *charset,
 		u = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) |	       \
 				((s[2] & 0x3f) << 6) | (s[3] & 0x3f);	       \
 		s += 4; l -= 4;						       \
+		if (u < 0x10000) u = 0xfffd;				       \
 	} else if (3 <= l && ((s[0] & 0xf0) == 0xe0) &&			       \
 			((s[1] & 0xc0) == 0x80) &&			       \
 			((s[2] & 0xc0) == 0x80)) {			       \
 		u = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) |	       \
 				(s[2] & 0x3f);				       \
 		s += 3; l -= 3;						       \
+		if (u < 0x800) u = 0xfffd;				       \
 	} else if (2 <= l && ((s[0] & 0xe0) == 0xc0) &&			       \
 			((s[1] & 0xc0) == 0x80)) {			       \
 		u = ((s[0] & 0x3f) << 6) | (s[1] & 0x3f);		       \
 		s += 2; l -= 2;						       \
+		if (u < 0x80) u = 0xfffd;				       \
 	} else if ((s[0] & 0x80) == 0) {				       \
 		u = s[0];						       \
 		s++; l--;						       \
 	} else {							       \
 		u = 0xfffd;						       \
 		s++; l--;						       \
+	}								       \
+	if ((u >= 0xd800 && u <= 0xdfff) || u == 0xfffe || u == 0xffff) {      \
+		u = 0xfffd;						       \
 	}
 
 #define rufl_CACHE "<Wimp$ScrapDir>.RUfl_cache"
