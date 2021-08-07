@@ -9,7 +9,8 @@
 #include "rufl_internal.h"
 
 
-static void rufl_dump_character_set(struct rufl_character_set *charset);
+static void rufl_dump_character_set_list(
+		const struct rufl_character_set *charset);
 static void rufl_dump_unicode_map(struct rufl_unicode_map *umap);
 static void rufl_dump_substitution_table(void);
 
@@ -27,7 +28,7 @@ void rufl_dump_state(void)
 		printf("  %u \"%s\"\n", i, rufl_font_list[i].identifier);
 		if (rufl_font_list[i].charset) {
 			printf("    ");
-			rufl_dump_character_set(rufl_font_list[i].charset);
+			rufl_dump_character_set_list(rufl_font_list[i].charset);
 			printf("\n");
 		} else {
 			printf("    (no charset table)\n");
@@ -75,28 +76,45 @@ void rufl_dump_state(void)
  * \param  charset  character set to print
  */
 
-void rufl_dump_character_set(struct rufl_character_set *charset)
+static void rufl_dump_character_set(const struct rufl_character_set *charset)
 {
-	unsigned int u, t;
+	unsigned int u, t, plane = PLANE_ID(charset->metadata) << 16;
 
 	u = 0;
 	while (u != 0x10000) {
-		while (u != 0x10000 && !rufl_character_set_test(charset, u))
+		while (u != 0x10000 &&
+				!rufl_character_set_test(charset, plane + u))
 			u++;
 		if (u != 0x10000) {
-			if (!rufl_character_set_test(charset, u + 1)) {
-				printf("%x ", u);
+			if (!rufl_character_set_test(charset, plane + u + 1)) {
+				printf("%x ", plane + u);
 				u++;
 			} else {
 				t = u;
-				while (rufl_character_set_test(charset, u))
+				while (rufl_character_set_test(
+							charset, plane + u))
 					u++;
-				printf("%x-%x ", t, u - 1);
+				printf("%x-%x ", plane + t, plane + u - 1);
 			}
 		}
 	}
 }
 
+/**
+ * Dump a representation of a character set list to stdout.
+ *
+ * \param  charset  character set to print
+ */
+
+void rufl_dump_character_set_list(const struct rufl_character_set *charset)
+{
+	while (EXTENSION_FOLLOWS(charset->metadata)) {
+		rufl_dump_character_set(charset);
+		charset = (void *)(((uint8_t *)charset) +
+				PLANE_SIZE(charset->metadata));
+	}
+	rufl_dump_character_set(charset);
+}
 
 /**
  * Dump a representation of a unicode map to stdout.

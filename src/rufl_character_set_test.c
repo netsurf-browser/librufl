@@ -12,18 +12,28 @@
  * Test if a character set contains a character.
  *
  * \param  charset  character set
- * \param  c        character code
+ * \param  u        Unicode codepoint
  * \return  true if present, false if absent
  */
 
-bool rufl_character_set_test(struct rufl_character_set *charset,
-		unsigned int c)
+bool rufl_character_set_test(const struct rufl_character_set *charset,
+		uint32_t u)
 {
-	unsigned int block = c >> 8;
-	unsigned int byte = (c >> 3) & 31;
-	unsigned int bit = c & 7;
+	unsigned int plane = u >> 16;
+	unsigned int block = (u >> 8) & 0xff;
+	unsigned int byte = (u >> 3) & 31;
+	unsigned int bit = u & 7;
 
-	if (256 <= block)
+	if (17 <= plane)
+		return false;
+
+	/* Look for the plane we want */
+	while (PLANE_ID(charset->metadata) != plane &&
+			EXTENSION_FOLLOWS(charset->metadata)) {
+		charset = (void *)(((uint8_t *)charset) +
+				PLANE_SIZE(charset->metadata));
+	}
+	if (PLANE_ID(charset->metadata) != plane)
 		return false;
 
 	if (charset->index[block] == BLOCK_EMPTY)
@@ -31,7 +41,7 @@ bool rufl_character_set_test(struct rufl_character_set *charset,
 	else if (charset->index[block] == BLOCK_FULL)
 		return true;
 	else {
-		unsigned char z = charset->block[charset->index[block]][byte];
+		uint8_t z = charset->block[charset->index[block]][byte];
 		return z & (1 << bit);
 	}
 }

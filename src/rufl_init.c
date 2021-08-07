@@ -575,9 +575,9 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 	}
 
 	/* shrink-wrap */
-	charset->size = offsetof(struct rufl_character_set, block) +
+	charset->metadata = offsetof(struct rufl_character_set, block) +
 			32 * last_used;
-	charset2 = realloc(charset, charset->size);
+	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
 	if (!charset2) {
 		free(charset);
 		return rufl_OUT_OF_MEMORY;
@@ -696,9 +696,9 @@ rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
 	}
 
 	/* shrink-wrap */
-	charset->size = offsetof(struct rufl_character_set, block) +
+	charset->metadata = offsetof(struct rufl_character_set, block) +
 			32 * last_used;
-	charset2 = realloc(charset, charset->size);
+	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
 	if (!charset2) {
 		free(charset);
 		return rufl_OUT_OF_MEMORY;
@@ -885,9 +885,9 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 	}
 
 	/* shrink-wrap */
-	charset->size = offsetof(struct rufl_character_set, block) +
+	charset->metadata = offsetof(struct rufl_character_set, block) +
 			32 * last_used;
-	charset2 = realloc(charset, charset->size);
+	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
 	if (!charset2) {
 		for (i = 0; i < num_umaps; i++)
 			free((umap + i)->encoding);
@@ -1255,7 +1255,8 @@ rufl_code rufl_save_cache(void)
 
 		/* character set */
 		if (fwrite(rufl_font_list[i].charset,
-				rufl_font_list[i].charset->size, 1, fp) != 1) {
+				PLANE_SIZE(rufl_font_list[i].charset->metadata),
+				1, fp) != 1) {
 			LOG("fwrite: 0x%x: %s", errno, strerror(errno));
 			fclose(fp);
 			return rufl_OK;
@@ -1430,7 +1431,7 @@ rufl_code rufl_load_cache(void)
 			return rufl_OUT_OF_MEMORY;
 		}
 
-		charset->size = size;
+		charset->metadata = size;
 		if (fread(charset->index, size - sizeof size, 1, fp) != 1) {
 			if (feof(fp))
 				LOG("fread: %s", "unexpected eof");

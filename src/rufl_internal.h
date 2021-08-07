@@ -14,20 +14,78 @@
 #endif
 
 
-/** The available characters in a font. The range which can be represented is
- * 0x0000 to 0xffff. The size of the structure is 4 + 256 + 32 * blocks. A
- * typical * 200 glyph font might have characters in 10 blocks, giving 580
- * bytes. The maximum possible size of the structure is 8388 bytes. Note that
- * since two index values are reserved, fonts with 65280-65024 glyphs may be
- * unrepresentable, if there are no full blocks. This is unlikely. The primary
- * aim of this structure is to make lookup fast. */
+/**
+ * The available Unicode codepoints represented by a font. The entire Unicode
+ * range (U+0000 - U+10FFFF) may be covered by the font, but only codepoints
+ * in the Basic Multilingual Plane (i.e. U+0000 - U+FFFF) can be represented
+ * without the need for extension structures.
+ *
+ * Fonts which provide glyphs for astral characters will set the extension
+ * bit in the structure size field. If set, this indicates that an additional
+ * character set structure follows immediately after this one. The plane id
+ * field in the structure metadata indicates which plane the structure relates
+ * to. Planes are specified in ascending order (as the most commonly used
+ * codepoints occur in earlier planes). Planes for which the font has no
+ * glyphs are omitted entirely.
+ *
+ * Each plane is subdivided into 256 codepoint blocks (each block representing
+ * 256 contiguous codepoints). Note, however, that two index values are
+ * reserved (to indicate full or empty blocks) so only 254 partial blocks may
+ * be represented. As of Unicode 13, all planes have at least two blocks
+ * unused (or, in the case of the surrogate ranges in the Basic Multilingual
+ * Plane, defined as containing no characters), so all valid codepoints should
+ * be representable using this scheme.
+ *
+ * The size of the structure is 4 + 256 + 32 * blocks. A typical 200 glyph
+ * font might represent codepoints in 10 blocks, using 580 bytes of storage.
+ * A plane with glyphs in every block (but no block fully populated) requires
+ * the maximum possible structure size of (4 + 256 + 32 * 254 =) 8388 bytes.
+ * The maximum storage required for (the unlikely scenario of) a font
+ * providing glyphs in every block in each of the 17 Unicode planes is
+ * 17 * 8388 = 142596 bytes.
+ *
+ * The primary aim of this structure is to make lookup fast.
+ */
 struct rufl_character_set {
-	/** Size of structure / bytes. */
-	size_t size;
+	/** Structure metadata.
+	 *
+	 * This field contains metadata about the structure in the form:
+	 *
+	 *    3                   2                   1                   0
+	 *  1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 * |E|   PID   |     Reserved      |             Size              |
+	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	 *
+	 * where:
+	 *
+	 *   extension (E): 1 bit
+	 *     If set, another character set covering a different plane
+	 *     follows.
+	 *
+	 *   plane id (PID): 5 bits
+	 *     The 0-based index of the Unicode plane this structure relates
+	 *     to. Valid values are in the range [0, 16], where 0 represents
+	 *     the Basic Multilingual Plane, and 16 represents the
+	 *     Supplementary Private Use Area - B.
+	 *
+	 *   reserved: 10 bits
+	 *     These bits are currently unused and must be set to 0.
+	 *
+	 *   size: 16 bits
+	 *     The total size of this structure, in bytes.
+	 */
+	uint32_t metadata;
+#	define EXTENSION_FOLLOWS(x) ((x) & (1u<<31))
+#	define PLANE_ID(x) (((x) >> 26) & 0x1f)
+#	define PLANE_SIZE(x) ((x) & 0xffff)
 
-	/** Index table. Each entry represents a block of 256 characters, so
-	 * i[k] refers to characters [256*k, 256*(k+1)). The value is either
-	 * BLOCK_EMPTY, BLOCK_FULL, or an offset into the block table. */
+	/** Index table.
+	 *
+	 * Each entry represents a block of 256 codepoints, so i[k] refers
+	 * to codepoints [256*k, 256*(k+1)). The value is either BLOCK_EMPTY,
+	 * BLOCK_FULL, or an offset into the block table.
+	 * */
 	uint8_t index[256];
 	/** The block has no characters present. */
 #	define BLOCK_EMPTY 254
@@ -142,8 +200,8 @@ rufl_code rufl_find_font_family(const char *family, rufl_style font_style,
 		struct rufl_character_set **charset);
 rufl_code rufl_find_font(unsigned int font, unsigned int font_size,
 		const char *encoding, font_f *fhandle);
-bool rufl_character_set_test(struct rufl_character_set *charset,
-		unsigned int c);
+bool rufl_character_set_test(const struct rufl_character_set *charset,
+		uint32_t u);
 
 
 #define rufl_utf8_read(s, l, u)						       \
