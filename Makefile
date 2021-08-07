@@ -31,7 +31,7 @@ endif
 
 # OSLib
 ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)
-  ifeq ($(BUILD),arm-unknown-riscos)
+  ifeq ($(HOST),arm-unknown-riscos)
     CFLAGS := $(CFLAGS) -I$(PREFIX)/include
     LDFLAGS := $(LDFLAGS) -lOSLib32
   endif
