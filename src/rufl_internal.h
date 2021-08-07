@@ -5,6 +5,7 @@
  * Copyright 2006 James Bursa <james@semichrome.net>
  */
 
+#include <inttypes.h>
 #include <limits.h>
 #include <oslib/font.h>
 #include "rufl.h"
@@ -27,7 +28,7 @@ struct rufl_character_set {
 	/** Index table. Each entry represents a block of 256 characters, so
 	 * i[k] refers to characters [256*k, 256*(k+1)). The value is either
 	 * BLOCK_EMPTY, BLOCK_FULL, or an offset into the block table. */
-	unsigned char index[256];
+	uint8_t index[256];
 	/** The block has no characters present. */
 #	define BLOCK_EMPTY 254
 	/** All characters in the block are present. */
@@ -35,16 +36,16 @@ struct rufl_character_set {
 
 	/** Block table. Each entry is a 256-bit bitmap indicating which
 	 * characters in the block are present and absent. */
-	unsigned char block[254][32];
+	uint8_t block[254][32];
 };
 
 
 /** Part of struct rufl_unicode_map. */
 struct rufl_unicode_map_entry {
-	/** Unicode value. */
-	unsigned short u;
+	/** Unicode value (must be in Basic Multilingual Plane). */
+	uint16_t u;
 	/** Corresponding character. */
-	unsigned char c;
+	uint8_t c;
 };
 
 
@@ -181,7 +182,8 @@ bool rufl_character_set_test(struct rufl_character_set *charset,
 
 struct rufl_glyph_map_entry {
 	const char *glyph_name;
-	unsigned short u;
+	/* The glyph map contains codepoints in the BMP only */
+	uint16_t u;
 };
 
 extern const struct rufl_glyph_map_entry rufl_glyph_map[];
