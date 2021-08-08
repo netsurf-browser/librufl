@@ -1044,6 +1044,114 @@ rufl_code rufl_init_populate_unicode_map(font_f f,
 	return result;
 }
 
+static int fromhex(char val, bool permit_lc)
+{
+	if ('0' <= val && val <= '9')
+		return val - '0';
+	else if ('A' <= val && val <= 'F')
+		return val - 'A' + 10;
+	else if (permit_lc && 'a' <= val && val <= 'f')
+		return val - 'a' + 10;
+	return -1;
+}
+
+static rufl_code emit_codepoint(char s[200], unsigned int i,
+		rufl_code (*callback)(void *pw,
+			uint32_t glyph_idx, uint32_t ucs4),
+		void *pw)
+{
+	struct rufl_glyph_map_entry *entry;
+	rufl_code result = rufl_OK;
+
+	if (s[0] != '/') {
+		/* Sparse encoding entry: [XX;]XXXX;NNN..;.... */
+		uint32_t val = 0;
+		int digits;
+
+		if (s[2] == ';' && fromhex(s[0], true) != -1 &&
+				fromhex(s[1], true) != -1) {
+			/* Skip leading "XX;" */
+			s += 3;
+		}
+
+		for (digits = 0; digits < 4; digits++) {
+			int nibble = fromhex(s[digits], true);
+			if (nibble == -1)
+				break;
+			val = (val << 4) | nibble;
+		}
+
+		/* Bail out if the data is not what we expect */
+		if (digits != 4 || s[digits] != ';')
+			return result;
+
+		/* Set the glyph index to the value we found */
+		i = val;
+		/* Advance s to the start of the glyph name */
+		s += digits + 1;
+		/* Terminate the glyph name */
+		for (digits = 0; s[digits] != '\0'; digits++) {
+			if (s[digits] == ';') {
+				s[digits] = '\0';
+				break;
+			}
+		}
+		/* Fall through to the glyph name search */
+	} else {
+		/* Skip the leading / */
+		s += 1;
+
+		if (!rufl_old_font_manager && s[0] == 'u') {
+			/* Handle /uniXXXX and /uXXXX - /uXXXXXXXX.
+			 * In the case of /uXXXXX - /uXXXXXXXX, no
+			 * leading zeroes are permitted. */
+			int max_digits = 8, off = 1, digits = 0;
+			bool leading_zero = false;
+			uint32_t val = 0;
+
+			if (s[1] == 'n' && s[2] == 'i') {
+				max_digits = 4;
+				off = 3;
+			}
+
+			while (digits < max_digits) {
+				int nibble = fromhex(s[off], false);
+				if (nibble == -1)
+					break;
+				leading_zero = (digits == 0 && nibble == 0);
+				val = (val << 4) | nibble;
+				off++;
+				digits++;
+			}
+			if ((digits == 4 && s[off] == '\0') ||
+					(digits > 4 && s[off] == '\0' &&
+					!leading_zero)) {
+				return callback(pw, i, val);
+			}
+
+			/* Otherwise, let the glyph name search decide */
+		}
+	}
+
+	entry = bsearch(s, rufl_glyph_map,
+			rufl_glyph_map_size,
+			sizeof rufl_glyph_map[0],
+			rufl_glyph_map_cmp);
+	if (entry) {
+		/* may be more than one unicode for the glyph
+		 * sentinels stop overshooting array */
+		while (strcmp(s, (entry - 1)->glyph_name) == 0)
+			entry--;
+		for (; strcmp(s, entry->glyph_name) == 0; entry++) {
+			result = callback(pw, i, entry->u);
+			if (result != rufl_OK)
+				break;
+		}
+	}
+
+	return result;
+}
+
 /**
  * Parse an encoding file
  */
@@ -1064,7 +1172,6 @@ rufl_code rufl_init_read_encoding(font_f font,
 	int c;
 	char filename[200];
 	char s[200];
-	struct rufl_glyph_map_entry *entry;
 	FILE *fp;
 
 	rufl_fm_error = xfont_read_encoding_filename(font, filename,
@@ -1076,9 +1183,14 @@ rufl_code rufl_init_read_encoding(font_f font,
 	}
 
 	fp = fopen(filename, "r");
-	if (!fp)
-		/* many "symbol" fonts have no encoding file: assume Latin 1 */
-		fp = fopen("Resources:$.Fonts.Encodings.Latin1", "r");
+	if (!fp) {
+		/* many "symbol" fonts have no encoding file */
+		const char *default_path =
+			"Resources:$.Fonts.Encodings./Default";
+		if (rufl_old_font_manager)
+			default_path = "Resources:$.Fonts.Encodings.Latin1";
+		fp = fopen(default_path, "r");
+	}
 	if (!fp)
 		return rufl_IO_ERROR;
 
@@ -1087,7 +1199,16 @@ rufl_code rufl_init_read_encoding(font_f font,
 
 		if (state == STATE_START) {
 			if (c == '/') {
-				n = 0;
+				s[0] = c;
+				n = 1;
+				state = STATE_COLLECT;
+			} else if (!rufl_old_font_manager &&
+					(('0' <= c && c <= '9') ||
+					 ('A' <= c && c <= 'F') ||
+					 ('a' <= c && c <= 'f'))) {
+				/* New-style sparse encoding file */
+				s[0] = c;
+				n = 1;
 				state = STATE_COLLECT;
 			} else if (c <= 0x20) {
 				/* Consume C0 and space */
@@ -1104,7 +1225,8 @@ rufl_code rufl_init_read_encoding(font_f font,
 			if ((c >= '0' && c <= '9') ||
 					(c >= 'a' && c <= 'z') ||
 					(c >= 'A' && c <= 'Z') ||
-					(c == '.') || (c == '_')) {
+					(c == '.') || (c == '_') ||
+					(c == ';')) {
 				/* Printable: append */
 				s[n++] = c;
 				if (n >= sizeof(s)) {
@@ -1126,24 +1248,8 @@ rufl_code rufl_init_read_encoding(font_f font,
 
 		if (emit) {
 			emit = false;
-			entry = bsearch(s, rufl_glyph_map,
-					rufl_glyph_map_size,
-					sizeof rufl_glyph_map[0],
-					rufl_glyph_map_cmp);
-			if (entry) {
-				/* may be more than one unicode for the glyph
-				 * sentinels stop overshooting array */
-				while (strcmp(s, (entry - 1)->glyph_name) == 0)
-					entry--;
-				for (; strcmp(s, entry->glyph_name) == 0;
-						entry++) {
-					if (callback(pw, i,
-							entry->u) != rufl_OK) {
-						done = true;
-						break;
-					}
-				}
-			}
+			if (emit_codepoint(s, i, callback, pw) != rufl_OK)
+				done = true;
 			i++;
 		}
 	}
