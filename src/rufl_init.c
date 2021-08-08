@@ -896,7 +896,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		return rufl_OUT_OF_MEMORY;
 	}
 
-	rufl_font_list[font_index].charset = charset;
+	rufl_font_list[font_index].charset = charset2;
 	rufl_font_list[font_index].umap = umap;
 	rufl_font_list[font_index].num_umaps = num_umaps;
 
