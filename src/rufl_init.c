@@ -440,6 +440,114 @@ int rufl_weight_table_cmp(const void *keyval, const void *datum)
 	return strcasecmp(key, entry->name);
 }
 
+static struct rufl_character_set *rufl_init_alloc_plane(uint8_t index)
+{
+	struct rufl_character_set *charset;
+	unsigned int u;
+
+	charset = calloc(1, sizeof *charset);
+	if (charset != NULL) {
+		/* Set plane ID. Extension/size must be filled in by caller */
+		charset->metadata |= ((index & 0x1f) << 26);
+		for (u = 0; u != 256; u++)
+			charset->index[u] = BLOCK_EMPTY;
+	}
+
+	return charset;
+}
+
+static void rufl_init_shrinkwrap_plane(struct rufl_character_set *charset)
+{
+	unsigned int last_used = PLANE_SIZE(charset->metadata);
+	unsigned int u, bit, byte;
+
+	/* Determine which blocks are full, and mark them as such */
+	for (u = 0; u != 256; u++) {
+		const unsigned int block = charset->index[u];
+
+		if (block == BLOCK_EMPTY)
+			continue;
+
+		bit = 0xff;
+
+		for (byte = 0; byte != 32; byte++)
+			bit &= charset->block[block][byte];
+
+		if (bit == 0xff) {
+			/* Block is full */
+
+			/* Find a block whose index is after this one.
+			 * If such a block exists, move its data into
+			 * this block, as this block's bitmap is now free
+			*/
+			for (byte = 0; byte != 256; byte++) {
+				if (charset->index[byte] < BLOCK_EMPTY &&
+						charset->index[byte] > block) {
+					break;
+				}
+			}
+			if (byte != 256) {
+				memcpy(charset->block[block],
+						charset->block[
+							charset->index[byte]],
+						32);
+				charset->index[byte] = block;
+			}
+
+			/* Now mark this block as full */
+			charset->index[u] = BLOCK_FULL;
+			last_used--;
+		}
+	}
+
+	/* Fill in this plane's size now we know it */
+	charset->metadata = (charset->metadata & 0xffff0000) |
+			(offsetof(struct rufl_character_set, block) +
+			 32 * last_used);
+}
+
+static struct rufl_character_set *rufl_init_shrinkwrap_planes(
+		struct rufl_character_set *planes[17])
+{
+	struct rufl_character_set *charset;
+	unsigned int size = 0, pos, u;
+
+	/* Shrink-wrap each plane, accumulating total required size as we go */
+	for (u = 0; u < 17; u++) {
+		if (planes[u]) {
+			LOG("shrink-wrapping plane %d", u);
+			rufl_init_shrinkwrap_plane(planes[u]);
+			size += PLANE_SIZE(planes[u]->metadata);
+		}
+	}
+
+	LOG("shrink-wrapped size: %u", size);
+
+	charset = malloc(size);
+	if (!charset)
+		return NULL;
+
+	/* Copy planes into output, backwards, setting the extension bit for
+	 * all but the last plane present */
+	pos = size;
+	for (u = 17; u > 0; u--) {
+		if (!planes[u-1])
+			continue;
+
+		LOG("merging plane %d", u);
+
+		/* Set E bit if not the last plane */
+		if (pos != size)
+			planes[u-1]->metadata |= (1u<<31);
+
+		pos -= PLANE_SIZE(planes[u-1]->metadata);
+		memcpy(((uint8_t *)charset) + pos, planes[u-1],
+				PLANE_SIZE(planes[u-1]->metadata));
+	}
+
+	return charset;
+}
+
 /**
  * Scan a font for available characters.
  */
@@ -449,22 +557,18 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 	char font_name[80];
 	int x_out, y_out;
 	unsigned int byte, bit;
-	unsigned int last_used = 0;
 	unsigned int string[2] = { 0, 0 };
 	unsigned int u, next;
+	struct rufl_character_set *planes[17];
 	struct rufl_character_set *charset;
-	struct rufl_character_set *charset2;
 	font_f font;
 	font_scan_block block = { { 0, 0 }, { 0, 0 }, -1, { 0, 0, 0, 0 } };
 
 	/*LOG("font %u \"%s\"", font_index,
 			rufl_font_list[font_index].identifier);*/
 
-	charset = calloc(1, sizeof *charset);
-	if (!charset)
-		return rufl_OUT_OF_MEMORY;
-	for (u = 0; u != 256; u++)
-		charset->index[u] = BLOCK_EMPTY;
+	for (u = 0; u < 17; u++)
+		planes[u] = NULL;
 
 	snprintf(font_name, sizeof font_name, "%s\\EUTF8",
 			rufl_font_list[font_index].identifier);
@@ -473,7 +577,6 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 	if (rufl_fm_error) {
 		LOG("xfont_find_font(\"%s\"): 0x%x: %s", font_name,
 				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		free(charset);
 		return rufl_OK;
 	}
 
@@ -490,16 +593,13 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 					rufl_fm_error->errnum, 
 					rufl_fm_error->errmess);
 			xfont_lose_font(font);
-			free(charset);
+			for (u = 0; u < 17; u++)
+				free(planes[u]);
 			return rufl_OK;
 		}
 
 		/* Skip DELETE and C0/C1 controls */
 		if (u < 0x0020 || (0x007f <= u && u <= 0x009f))
-			continue;
-
-		/* Skip astral characters */
-		if (u > 0xffff)
 			continue;
 
 		/* Skip unmapped characters */
@@ -534,60 +634,152 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 			 * fonts do this) */
 		} else {
 			/* present */
-			if (charset->index[u >> 8] == BLOCK_EMPTY) {
-				charset->index[u >> 8] = last_used;
-				last_used++;
-				if (last_used == 254)
-					/* too many characters */
-					break;
+			const unsigned int plane = (u >> 16) & 0x1f;
+			const unsigned int block = (u >> 8) & 0xff;
+
+			/* Ensure plane exists */
+			if (!planes[plane]) {
+				planes[plane] = rufl_init_alloc_plane(plane);
+				if (!planes[plane]) {
+					for (u = 0; u < 17; u++)
+						free(planes[u]);
+					xfont_lose_font(font);
+					return rufl_OUT_OF_MEMORY;
+				}
 			}
 
-			byte = (u >> 3) & 31;
-			bit = u & 7;
-			charset->block[charset->index[u >> 8]][byte] |= 
-					1 << bit;
+			/* Allocate block, if it's currently empty */
+			if (planes[plane]->index[block] == BLOCK_EMPTY) {
+				unsigned int last_used =
+					PLANE_SIZE(planes[plane]->metadata);
+				if (last_used < BLOCK_EMPTY) {
+					planes[plane]->index[block] = last_used;
+					planes[plane]->metadata =
+						(planes[plane]->metadata &
+						 0xffff0000) |
+						(last_used + 1);
+				}
+			}
+
+			/* Set bit for codepoint in bitmap, if bitmap exists */
+			if (planes[plane]->index[block] < BLOCK_EMPTY) {
+				byte = (u >> 3) & 31;
+				bit = u & 7;
+				planes[plane]->block[
+					planes[plane]->index[block]
+				][byte] |= 1 << bit;
+			}
 		}
 	}
 
 	xfont_lose_font(font);
 
 	if (rufl_fm_error) {
-		free(charset);
 		LOG("xfont_scan_string(\"%s\", U+%x, ...): 0x%x: %s",
 				font_name, u,
+				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		for (u = 0; u < 17; u++)
+			free(planes[u]);
+		return rufl_FONT_MANAGER_ERROR;
+	}
+
+	charset = rufl_init_shrinkwrap_planes(planes);
+	if (!charset) {
+		for (u = 0; u < 17; u++)
+			free(planes[u]);
+		return rufl_OUT_OF_MEMORY;
+	}
+
+	for (u = 0; u < 17; u++)
+		free(planes[u]);
+
+	rufl_font_list[font_index].charset = charset;
+
+	return rufl_OK;
+}
+
+static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
+{
+	struct rufl_character_set **planes = pw;
+
+	(void) glyph_idx;
+
+	planes[(ucs4 >> 16) & 0x1f] = (struct rufl_character_set *) 1;
+
+	return rufl_OK;
+}
+
+struct find_glyph_ctx {
+	const char *font_name;
+	font_f font;
+	struct rufl_character_set **planes;
+};
+
+static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
+{
+	struct find_glyph_ctx *ctx = pw;
+	int x_out, y_out;
+	unsigned int string[2] = { 0, 0 };
+	font_scan_block block = { { 0, 0 }, { 0, 0 }, -1, { 0, 0, 0, 0 } };
+
+	(void) glyph_idx;
+
+	if (ucs4 % 0x200 == 0)
+		rufl_init_status(0, 0);
+
+	string[0] = ucs4;
+	rufl_fm_error = xfont_scan_string(ctx->font, (char *) string,
+			font_RETURN_BBOX | font_GIVEN32_BIT |
+			font_GIVEN_FONT | font_GIVEN_LENGTH |
+			font_GIVEN_BLOCK,
+			0x7fffffff, 0x7fffffff,
+			&block, 0, 4,
+			0, &x_out, &y_out, 0);
+	if (rufl_fm_error) {
+		LOG("xfont_scan_string(\"%s\", U+%x, ...): 0x%x: %s",
+				ctx->font_name, ucs4,
 				rufl_fm_error->errnum, rufl_fm_error->errmess);
 		return rufl_FONT_MANAGER_ERROR;
 	}
 
-	/* Determine which blocks are full, and mark them as such */
-	for (u = 0; u != 256; u++) {
-		if (charset->index[u] == BLOCK_EMPTY)
-			continue;
+	if (block.bbox.x0 == 0x20000000) {
+		/* absent (no definition) */
+	} else if (x_out == 0 && y_out == 0 &&
+			block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
+			block.bbox.x1 == 0 && block.bbox.y1 == 0) {
+		/* absent (empty) */
+	} else if (block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
+			block.bbox.x1 == 0 && block.bbox.y1 == 0 &&
+			!rufl_is_space(ucs4)) {
+		/* absent (space but not a space character - some
+		 * fonts do this) */
+	} else {
+		/* present */
+		const unsigned int plane = (ucs4 >> 16) & 0x1f;
+		const unsigned int blk = (ucs4 >> 8) & 0xff;
+		const unsigned int byte = (ucs4 >> 3) & 31;
+		const unsigned int bit = ucs4 & 7;
 
-		bit = 0xff;
+		/* Allocate block, if it's currently empty */
+		if (ctx->planes[plane]->index[blk] == BLOCK_EMPTY) {
+			unsigned int last_used =
+				PLANE_SIZE(ctx->planes[plane]->metadata);
+			if (last_used < BLOCK_EMPTY) {
+				ctx->planes[plane]->index[blk] = last_used;
+				ctx->planes[plane]->metadata =
+					(ctx->planes[plane]->metadata &
+					 0xffff0000) |
+					(last_used + 1);
+			}
+		}
 
-		for (byte = 0; byte != 32; byte++)
-			bit &= charset->block[u][byte];
-
-		if (bit == 0xff) {
-			/* Block is full */
-			charset->index[u] = BLOCK_FULL;
-
-			for (byte = 0; byte != 32; byte++)
-				charset->block[u][byte] = 0;
+		/* Set bit for codepoint in bitmap, if bitmap exists */
+		if (ctx->planes[plane]->index[blk] < BLOCK_EMPTY) {
+			ctx->planes[plane]->block[
+				ctx->planes[plane]->index[blk]
+			][byte] |= 1 << bit;
 		}
 	}
-
-	/* shrink-wrap */
-	charset->metadata = offsetof(struct rufl_character_set, block) +
-			32 * last_used;
-	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
-	if (!charset2) {
-		free(charset);
-		return rufl_OUT_OF_MEMORY;
-	}
-
-	rufl_font_list[font_index].charset = charset;
 
 	return rufl_OK;
 }
@@ -599,23 +791,18 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
 {
 	char font_name[80];
-	int x_out, y_out;
-	unsigned int byte, bit;
-	unsigned int block_count = 0;
-	unsigned int last_used = 0;
-	unsigned int string[2] = { 0, 0 };
-	unsigned int u;
+	struct rufl_character_set *planes[17];
 	struct rufl_character_set *charset;
-	struct rufl_character_set *charset2;
 	font_f font;
-	font_scan_block block = { { 0, 0 }, { 0, 0 }, -1, { 0, 0, 0, 0 } };
+	unsigned int plane;
+	struct find_glyph_ctx ctx;
+	rufl_code rc;
 
 	/*LOG("font %u \"%s\"", font_index,
  			rufl_font_list[font_index].identifier);*/
 
-	charset = calloc(1, sizeof *charset);
-	if (!charset)
-		return rufl_OUT_OF_MEMORY;
+	for (plane = 0; plane < 17; plane++)
+		planes[plane] = NULL;
 
 	snprintf(font_name, sizeof font_name, "%s\\EUTF8",
 			rufl_font_list[font_index].identifier);
@@ -624,89 +811,52 @@ rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
 	if (rufl_fm_error) {
 		LOG("xfont_find_font(\"%s\"): 0x%x: %s", font_name,
 				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		free(charset);
 		return rufl_OK;
 	}
 
-	/* scan through all characters */
-	for (u = 0x0020; u != 0x10000; u++) {
-		if (u == 0x007f) {
-			/* skip DELETE and C1 controls */
-			u = 0x009f;
+	/* First pass: find the planes we need */
+	rc = rufl_init_read_encoding(font, find_plane_cb, planes);
+	if (rc != rufl_OK)
+		return rc;
+
+	/* Allocate the planes */
+	for (plane = 0; plane < 17; plane++) {
+		if (!planes[plane])
 			continue;
+
+		planes[plane] = rufl_init_alloc_plane(plane);
+		if (!planes[plane]) {
+			while (plane > 0)
+				free(planes[plane-1]);
+			xfont_lose_font(font);
+			return rufl_OUT_OF_MEMORY;
 		}
+	}
 
-		if (u % 0x200 == 0)
-			rufl_init_status(0, 0);
+	/* Second pass: populate the planes */
+	ctx.font_name = font_name;
+	ctx.font = font;
+	ctx.planes = planes;
 
-		string[0] = u;
-		rufl_fm_error = xfont_scan_string(font, (char *) string,
-				font_RETURN_BBOX | font_GIVEN32_BIT |
-				font_GIVEN_FONT | font_GIVEN_LENGTH |
-				font_GIVEN_BLOCK,
-				0x7fffffff, 0x7fffffff,
-				&block, 0, 4,
-				0, &x_out, &y_out, 0);
-		if (rufl_fm_error)
-			break;
-
-		if (block.bbox.x0 == 0x20000000) {
-			/* absent (no definition) */
-		} else if (x_out == 0 && y_out == 0 &&
-				block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
-				block.bbox.x1 == 0 && block.bbox.y1 == 0) {
-			/* absent (empty) */
-                } else if (block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
-				block.bbox.x1 == 0 && block.bbox.y1 == 0 &&
-				!rufl_is_space(u)) {
-			/* absent (space but not a space character - some
-			 * fonts do this) */
-		} else {
-			/* present */
-			byte = (u >> 3) & 31;
-			bit = u & 7;
-			charset->block[last_used][byte] |= 1 << bit;
-
-			block_count++;
-		}
-
-		if ((u + 1) % 256 == 0) {
-			/* end of block */
-			if (block_count == 0)
-				charset->index[u >> 8] = BLOCK_EMPTY;
-			else if (block_count == 256) {
-				charset->index[u >> 8] = BLOCK_FULL;
-				for (byte = 0; byte != 32; byte++)
-					charset->block[last_used][byte] = 0;
-			} else {
-				charset->index[u >> 8] = last_used;
-				last_used++;
-				if (last_used == 254)
-					/* too many characters */
-					break;
-			}
-			block_count = 0;
-		}
+	rc = rufl_init_read_encoding(font, find_glyph_cb, &ctx);
+	if (rc != rufl_OK) {
+		for (plane = 0; plane < 17; plane++)
+			free(planes[plane]);
+		xfont_lose_font(font);
+		return rc;
 	}
 
 	xfont_lose_font(font);
 
-	if (rufl_fm_error) {
-		free(charset);
-		LOG("xfont_scan_string(\"%s\", U+%x, ...): 0x%x: %s",
-				font_name, u,
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		return rufl_FONT_MANAGER_ERROR;
-	}
-
-	/* shrink-wrap */
-	charset->metadata = offsetof(struct rufl_character_set, block) +
-			32 * last_used;
-	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
-	if (!charset2) {
-		free(charset);
+	charset = rufl_init_shrinkwrap_planes(planes);
+	if (!charset) {
+		for (plane = 0; plane < 17; plane++)
+			free(planes[plane]);
 		return rufl_OUT_OF_MEMORY;
 	}
+
+	for (plane = 0; plane < 17; plane++)
+		free(planes[plane]);
 
 	rufl_font_list[font_index].charset = charset;
 
@@ -727,6 +877,9 @@ bool rufl_is_space(unsigned int u)
 
 /**
  * Scan a font for available characters (old font manager version).
+ * By definition, no astral characters are supported when using a non-UCS
+ * Font Manager (font encodings are defined using PostScript glyph names
+ * which, per the Glyph list, can only fall in the Basic Multilingual Plane)
  */
 
 rufl_code rufl_init_scan_font_old(unsigned int font_index)
@@ -888,9 +1041,11 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		return rufl_OK;
 	}
 
-	/* shrink-wrap */
-	charset->metadata = offsetof(struct rufl_character_set, block) +
-			32 * last_used;
+	/* Shrink-wrap. We only have the one plane so fill in last_used
+	 * as expected by the shrinkwrapping helper and then resize the
+	 * resulting charset manually. */
+	charset->metadata = (charset->metadata & 0xffff0000) | last_used;
+	rufl_init_shrinkwrap_plane(charset);
 	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
 	if (!charset2) {
 		for (i = 0; i < num_umaps; i++)
