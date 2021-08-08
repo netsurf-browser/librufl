@@ -35,6 +35,7 @@ unsigned short *rufl_substitution_table = 0;
 struct rufl_cache_entry rufl_cache[rufl_CACHE_SIZE];
 int rufl_cache_time = 0;
 bool rufl_old_font_manager = false;
+static bool rufl_broken_font_enumerate_characters = false;
 wimp_w rufl_status_w = 0;
 char rufl_status_buffer[80];
 
@@ -73,7 +74,6 @@ static rufl_code rufl_init_add_font(const char *identifier,
 		const char *local_name);
 static int rufl_weight_table_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_init_scan_font(unsigned int font);
-static rufl_code rufl_init_scan_font_no_enumerate(unsigned int font);
 static bool rufl_is_space(unsigned int u);
 static rufl_code rufl_init_scan_font_old(unsigned int font_index);
 static rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
@@ -105,7 +105,6 @@ static void rufl_init_status_close(void);
 
 rufl_code rufl_init(void)
 {
-	bool rufl_broken_font_enumerate_characters = false;
 	unsigned int changes = 0;
 	unsigned int i;
 	int fm_version;
@@ -202,8 +201,6 @@ rufl_code rufl_init(void)
 				(float) i / rufl_font_list_entries);
 		if (rufl_old_font_manager)
 			code = rufl_init_scan_font_old(i);
-		else if (rufl_broken_font_enumerate_characters)
-			code = rufl_init_scan_font_no_enumerate(i);
 		else
 			code = rufl_init_scan_font(i);
 		if (code != rufl_OK) {
@@ -548,37 +545,17 @@ static struct rufl_character_set *rufl_init_shrinkwrap_planes(
 	return charset;
 }
 
-/**
- * Scan a font for available characters.
- */
-
-rufl_code rufl_init_scan_font(unsigned int font_index)
+static rufl_code rufl_init_enumerate_characters(const char *font_name,
+		font_f font,
+		rufl_code (*callback)(void *pw,
+			uint32_t glyph_idx, uint32_t ucs4),
+		void *pw)
 {
-	char font_name[80];
-	int x_out, y_out;
-	unsigned int byte, bit;
-	unsigned int string[2] = { 0, 0 };
 	unsigned int u, next;
-	struct rufl_character_set *planes[17];
-	struct rufl_character_set *charset;
-	font_f font;
-	font_scan_block block = { { 0, 0 }, { 0, 0 }, -1, { 0, 0, 0, 0 } };
+	rufl_code result;
 
-	/*LOG("font %u \"%s\"", font_index,
-			rufl_font_list[font_index].identifier);*/
-
-	for (u = 0; u < 17; u++)
-		planes[u] = NULL;
-
-	snprintf(font_name, sizeof font_name, "%s\\EUTF8",
-			rufl_font_list[font_index].identifier);
-
-	rufl_fm_error = xfont_find_font(font_name, 160, 160, 0, 0, &font, 0, 0);
-	if (rufl_fm_error) {
-		LOG("xfont_find_font(\"%s\"): 0x%x: %s", font_name,
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		return rufl_OK;
-	}
+	if (rufl_broken_font_enumerate_characters)
+		return rufl_init_read_encoding(font, callback, pw);
 
 	/* Scan through mapped characters */
 	for (u = 0; u != (unsigned int) -1; u = next) {
@@ -592,110 +569,20 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 					font_name, u,
 					rufl_fm_error->errnum, 
 					rufl_fm_error->errmess);
-			xfont_lose_font(font);
-			for (u = 0; u < 17; u++)
-				free(planes[u]);
-			return rufl_OK;
+			break;
 		}
-
-		/* Skip DELETE and C0/C1 controls */
-		if (u < 0x0020 || (0x007f <= u && u <= 0x009f))
-			continue;
 
 		/* Skip unmapped characters */
 		if (internal == (unsigned int) -1)
 			continue;
 
-		if (u % 0x200 == 0)
-			rufl_init_status(0, 0);
-
-		/* Character is mapped, let's see if it's really there */
-		string[0] = u;
-		rufl_fm_error = xfont_scan_string(font, (char *) string,
-				font_RETURN_BBOX | font_GIVEN32_BIT |
-				font_GIVEN_FONT | font_GIVEN_LENGTH |
-				font_GIVEN_BLOCK,
-				0x7fffffff, 0x7fffffff,
-				&block, 0, 4,
-				0, &x_out, &y_out, 0);
-		if (rufl_fm_error)
+		/* Character is mapped, emit it */
+		result = callback(pw, internal, u);
+		if (result != rufl_OK)
 			break;
-
-		if (block.bbox.x0 == 0x20000000) {
-			/* absent (no definition) */
-		} else if (x_out == 0 && y_out == 0 &&
-				block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
-				block.bbox.x1 == 0 && block.bbox.y1 == 0) {
-			/* absent (empty) */
-                } else if (block.bbox.x0 == 0 && block.bbox.y0 == 0 &&
-				block.bbox.x1 == 0 && block.bbox.y1 == 0 &&
-				!rufl_is_space(u)) {
-			/* absent (space but not a space character - some 
-			 * fonts do this) */
-		} else {
-			/* present */
-			const unsigned int plane = (u >> 16) & 0x1f;
-			const unsigned int block = (u >> 8) & 0xff;
-
-			/* Ensure plane exists */
-			if (!planes[plane]) {
-				planes[plane] = rufl_init_alloc_plane(plane);
-				if (!planes[plane]) {
-					for (u = 0; u < 17; u++)
-						free(planes[u]);
-					xfont_lose_font(font);
-					return rufl_OUT_OF_MEMORY;
-				}
-			}
-
-			/* Allocate block, if it's currently empty */
-			if (planes[plane]->index[block] == BLOCK_EMPTY) {
-				unsigned int last_used =
-					PLANE_SIZE(planes[plane]->metadata);
-				if (last_used < BLOCK_EMPTY) {
-					planes[plane]->index[block] = last_used;
-					planes[plane]->metadata =
-						(planes[plane]->metadata &
-						 0xffff0000) |
-						(last_used + 1);
-				}
-			}
-
-			/* Set bit for codepoint in bitmap, if bitmap exists */
-			if (planes[plane]->index[block] < BLOCK_EMPTY) {
-				byte = (u >> 3) & 31;
-				bit = u & 7;
-				planes[plane]->block[
-					planes[plane]->index[block]
-				][byte] |= 1 << bit;
-			}
-		}
 	}
 
-	xfont_lose_font(font);
-
-	if (rufl_fm_error) {
-		LOG("xfont_scan_string(\"%s\", U+%x, ...): 0x%x: %s",
-				font_name, u,
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		for (u = 0; u < 17; u++)
-			free(planes[u]);
-		return rufl_FONT_MANAGER_ERROR;
-	}
-
-	charset = rufl_init_shrinkwrap_planes(planes);
-	if (!charset) {
-		for (u = 0; u < 17; u++)
-			free(planes[u]);
-		return rufl_OUT_OF_MEMORY;
-	}
-
-	for (u = 0; u < 17; u++)
-		free(planes[u]);
-
-	rufl_font_list[font_index].charset = charset;
-
-	return rufl_OK;
+	return result;
 }
 
 static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
@@ -704,7 +591,9 @@ static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 
 	(void) glyph_idx;
 
-	planes[(ucs4 >> 16) & 0x1f] = (struct rufl_character_set *) 1;
+	/* Skip DELETE and C0/C1 controls */
+	if (ucs4 > 0x0020 && (ucs4 < 0x007f || 0x009f < ucs4))
+		planes[(ucs4 >> 16) & 0x1f] = (struct rufl_character_set *) 1;
 
 	return rufl_OK;
 }
@@ -723,6 +612,10 @@ static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	font_scan_block block = { { 0, 0 }, { 0, 0 }, -1, { 0, 0, 0, 0 } };
 
 	(void) glyph_idx;
+
+	/* Skip DELETE and C0/C1 controls */
+	if (ucs4 < 0x0020 || (0x007f <= ucs4 && ucs4 <= 0x009f))
+		return rufl_OK;
 
 	if (ucs4 % 0x200 == 0)
 		rufl_init_status(0, 0);
@@ -785,10 +678,10 @@ static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 }
 
 /**
- * Scan a font for available characters (version without character enumeration)
+ * Scan a font for available characters
  */
 
-rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
+rufl_code rufl_init_scan_font(unsigned int font_index)
 {
 	char font_name[80];
 	struct rufl_character_set *planes[17];
@@ -815,7 +708,8 @@ rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
 	}
 
 	/* First pass: find the planes we need */
-	rc = rufl_init_read_encoding(font, find_plane_cb, planes);
+	rc = rufl_init_enumerate_characters(font_name, font,
+			find_plane_cb, planes);
 	if (rc != rufl_OK)
 		return rc;
 
@@ -838,7 +732,8 @@ rufl_code rufl_init_scan_font_no_enumerate(unsigned int font_index)
 	ctx.font = font;
 	ctx.planes = planes;
 
-	rc = rufl_init_read_encoding(font, find_glyph_cb, &ctx);
+	rc = rufl_init_enumerate_characters(font_name, font,
+			find_glyph_cb, &ctx);
 	if (rc != rufl_OK) {
 		for (plane = 0; plane < 17; plane++)
 			free(planes[plane]);
