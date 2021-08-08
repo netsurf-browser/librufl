@@ -1424,7 +1424,10 @@ rufl_code rufl_save_cache(void)
 	}
 
 	for (i = 0; i != rufl_font_list_entries; i++) {
-		if (!rufl_font_list[i].charset)
+		const struct rufl_character_set *charset =
+				rufl_font_list[i].charset;
+
+		if (!charset)
 			continue;
 
 		/* length of font identifier */
@@ -1442,9 +1445,26 @@ rufl_code rufl_save_cache(void)
 			return rufl_OK;
 		}
 
-		/* character set */
-		if (fwrite(rufl_font_list[i].charset,
-				PLANE_SIZE(rufl_font_list[i].charset->metadata),
+		/* character set (all planes) */
+		LOG("writing character sets for %s",
+				rufl_font_list[i].identifier);
+		while (EXTENSION_FOLLOWS(charset->metadata)) {
+			LOG("writing plane %d (%u)",
+					PLANE_ID(charset->metadata),
+					PLANE_SIZE(charset->metadata));
+			if (fwrite(charset, PLANE_SIZE(charset->metadata),
+					1, fp) != 1) {
+				LOG("fwrite: 0x%x: %s", errno, strerror(errno));
+				fclose(fp);
+				return rufl_OK;
+			}
+			charset = (void *)(((uint8_t *)charset) +
+					PLANE_SIZE(charset->metadata));
+		}
+		LOG("writing plane %d (%u)",
+				PLANE_ID(charset->metadata),
+				PLANE_SIZE(charset->metadata));
+		if (fwrite(charset, PLANE_SIZE(charset->metadata),
 				1, fp) != 1) {
 			LOG("fwrite: 0x%x: %s", errno, strerror(errno));
 			fclose(fp);
@@ -1528,10 +1548,11 @@ rufl_code rufl_load_cache(void)
 	unsigned int i = 0;
 	bool old_font_manager;
 	char *identifier;
-	size_t len, size;
+	size_t len, size = 0;
+	uint32_t metadata;
 	FILE *fp;
 	struct rufl_font_list_entry *entry;
-	struct rufl_character_set *charset;
+	struct rufl_character_set *charset = NULL, *cur_charset;
 	struct rufl_unicode_map *umap = NULL;
 	unsigned int num_umaps = 0;
 
@@ -1603,33 +1624,56 @@ rufl_code rufl_load_cache(void)
 		identifier[len] = 0;
 
 		/* character set */
-		if (fread(&size, sizeof size, 1, fp) != 1) {
-			if (feof(fp))
-				LOG("fread: %s", "unexpected eof");
-			else
-				LOG("fread: 0x%x: %s", errno, strerror(errno));
-			free(identifier);
-			break;
-		}
+		LOG("reading character sets for %s", identifier);
+		do {
+			if (fread(&metadata, sizeof metadata, 1, fp) != 1) {
+				if (feof(fp))
+					LOG("fread: %s", "unexpected eof");
+				else
+					LOG("fread: 0x%x: %s",
+							errno, strerror(errno));
+				free(identifier);
+				break;
+			}
 
-		charset = malloc(size);
-		if (!charset) {
-			LOG("malloc(%zu) failed", size);
-			free(identifier);
-			fclose(fp);
-			return rufl_OUT_OF_MEMORY;
-		}
+			LOG("reading plane %d (%u)",
+					PLANE_ID(metadata),
+					PLANE_SIZE(metadata));
+			if (!charset) {
+				charset = cur_charset = malloc(
+						PLANE_SIZE(metadata));
+			} else {
+				struct rufl_character_set *c2 = realloc(charset,
+						size + PLANE_SIZE(metadata));
+				if (!c2) {
+					free(charset);
+				}
+				charset = c2;
+				cur_charset = (void *)(((uint8_t *) charset) +
+						size);
+			}
+			if (!charset) {
+				LOG("malloc(%zu) failed", size);
+				free(identifier);
+				fclose(fp);
+				return rufl_OUT_OF_MEMORY;
+			}
 
-		charset->metadata = size;
-		if (fread(charset->index, size - sizeof size, 1, fp) != 1) {
-			if (feof(fp))
-				LOG("fread: %s", "unexpected eof");
-			else
-				LOG("fread: 0x%x: %s", errno, strerror(errno));
-			free(charset);
-			free(identifier);
-			break;
-		}
+			size += PLANE_SIZE(metadata);
+			cur_charset->metadata = metadata;
+			if (fread(cur_charset->index,
+					PLANE_SIZE(metadata) - sizeof metadata,
+					1, fp) != 1) {
+				if (feof(fp))
+					LOG("fread: %s", "unexpected eof");
+				else
+					LOG("fread: 0x%x: %s",
+							errno, strerror(errno));
+				free(charset);
+				free(identifier);
+				break;
+			}
+		} while(EXTENSION_FOLLOWS(cur_charset->metadata));
 
 		/* unicode map */
 		if (rufl_old_font_manager) {
@@ -1760,6 +1804,9 @@ rufl_code rufl_load_cache(void)
 			free(umap);
 			free(charset);
 		}
+
+		charset = NULL;
+		size = 0;
 
                 free(identifier);
 	}

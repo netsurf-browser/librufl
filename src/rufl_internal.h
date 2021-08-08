@@ -235,7 +235,7 @@ bool rufl_character_set_test(const struct rufl_character_set *charset,
 	}
 
 #define rufl_CACHE "<Wimp$ScrapDir>.RUfl_cache"
-#define rufl_CACHE_VERSION 3
+#define rufl_CACHE_VERSION 4
 
 
 struct rufl_glyph_map_entry {
