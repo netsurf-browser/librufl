@@ -121,7 +121,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 {
 	const char *font_encoding = NULL;
 	unsigned int font, font1, u;
-	unsigned short u1[2];
+	uint32_t u1[2];
 	struct rufl_character_set *charset;
 	struct rufl_unicode_map_entry *umap_entry = NULL;
 	font_f f;
@@ -235,7 +235,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	flags = font_GIVEN_BLOCK | font_GIVEN_LENGTH | font_GIVEN_FONT |
 		font_RETURN_BBOX;
 
-	u1[0] = (unsigned short)u;
+	u1[0] = u;
 	u1[1] = 0;
 
 	if (font1 == rufl_CACHE_CORPUS) {
@@ -266,8 +266,8 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	} else {
 		/* UCS Font Manager */
 		rufl_fm_error = xfont_scan_string(f, (const char *)u1,
-				flags | font_GIVEN16_BIT,
-				0x7fffffff, 0x7fffffff, &block, 0, 2,
+				flags | font_GIVEN32_BIT,
+				0x7fffffff, 0x7fffffff, &block, 0, 4,
 				0, &xa, &ya, 0);
 		if (rufl_fm_error) {
 			LOG("xfont_scan_string: 0x%x: %s",

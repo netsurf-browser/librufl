@@ -18,7 +18,7 @@ static int cubic_to(os_coord *control1, os_coord *control2, os_coord *to,
 		void *user);
 static void callback(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned short *s16, unsigned int n,
+		const char *s8, unsigned int *s32, unsigned int n,
 		int x, int y);
 
 
@@ -131,7 +131,7 @@ int cubic_to(os_coord *control1, os_coord *control2, os_coord *to,
 
 void callback(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned short *s16, unsigned int n,
+		const char *s8, unsigned int *s32, unsigned int n,
 		int x, int y)
 {
 	(void) context;
@@ -142,7 +142,7 @@ void callback(void *context,
 	else {
 		printf("s16 \"");
 		for (unsigned int i = 0; i != n; i++)
-			printf("%x ", (unsigned int) s16[i]);
+			printf("%x ", (unsigned int) s32[i]);
 		printf("\" ");
 	}
 	printf("%i %i\n", x, y);

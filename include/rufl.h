@@ -124,7 +124,7 @@ rufl_code rufl_split(const char *font_family, rufl_style font_style,
 /** Type of callback function for rufl_paint_callback(). */
 typedef void (*rufl_callback_t)(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned short *s16, unsigned int n,
+		const char *s8, unsigned int *s32, unsigned int n,
 		int x, int y);
 
 

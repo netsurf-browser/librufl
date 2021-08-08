@@ -32,20 +32,20 @@ static rufl_code rufl_process(rufl_action action,
 		int *width, int click_x, size_t *char_offset, int *actual_x,
 		rufl_callback_t callback, void *context);
 static rufl_code rufl_process_span(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font, unsigned int font_size, unsigned int slant,
 		int *x, int y, unsigned int flags,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context);
 static rufl_code rufl_process_span_old(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font, unsigned int font_size, unsigned int slant,
 		int *x, int y, unsigned int flags,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context);
 static int rufl_unicode_map_search_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_process_not_available(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font_size, int *x, int y,
 		unsigned int flags,
 		int click_x, size_t *offset,
@@ -159,7 +159,7 @@ rufl_code rufl_process(rufl_action action,
 		int *width, int click_x, size_t *char_offset, int *actual_x,
 		rufl_callback_t callback, void *context)
 {
-	unsigned short s[rufl_PROCESS_CHUNK];
+	uint32_t s[rufl_PROCESS_CHUNK];
 	unsigned int font;
 	unsigned int font0, font1;
 	unsigned int n;
@@ -295,13 +295,13 @@ rufl_code rufl_process(rufl_action action,
  */
 
 rufl_code rufl_process_span(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font, unsigned int font_size, unsigned int slant,
 		int *x, int y, unsigned int flags,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context)
 {
-	unsigned short *split_point;
+	uint32_t *split_point;
 	int x_out, y_out;
 	unsigned int i;
 	char font_name[80];
@@ -327,10 +327,10 @@ rufl_code rufl_process_span(rufl_action action,
 				(oblique ? font_GIVEN_TRFM : 0) |
 				font_GIVEN_LENGTH |
 				font_GIVEN_FONT | font_KERN |
-				font_GIVEN16_BIT |
+				font_GIVEN32_BIT |
 				((flags & rufl_BLEND_FONT) ?
 						font_BLEND_FONT : 0),
-				*x, y, 0, &trfm_oblique, n * 2);
+				*x, y, 0, &trfm_oblique, n * 4);
 		if (rufl_fm_error) {
 			LOG("xfont_paint: 0x%x: %s",
 					rufl_fm_error->errnum,
@@ -350,19 +350,19 @@ rufl_code rufl_process_span(rufl_action action,
 	if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
 		rufl_fm_error = xfont_scan_string(f, (const char *) s,
 				font_GIVEN_LENGTH | font_GIVEN_FONT |
-				font_KERN | font_GIVEN16_BIT |
+				font_KERN | font_GIVEN32_BIT |
 				((action == rufl_X_TO_OFFSET) ?
 						font_RETURN_CARET_POS : 0),
 				(click_x - *x) * 400, 0x7fffffff, 0, 0,
-				n * 2,
+				n * 4,
 				(char **)(void *)&split_point, 
 				&x_out, &y_out, 0);
 		*offset = split_point - s;
 	} else {
 		rufl_fm_error = xfont_scan_string(f, (const char *) s,
 				font_GIVEN_LENGTH | font_GIVEN_FONT |
-				font_KERN | font_GIVEN16_BIT,
-				0x7fffffff, 0x7fffffff, 0, 0, n * 2,
+				font_KERN | font_GIVEN32_BIT,
+				0x7fffffff, 0x7fffffff, 0, 0, n * 4,
 				0, &x_out, &y_out, 0);
 	}
 	if (rufl_fm_error) {
@@ -383,7 +383,7 @@ rufl_code rufl_process_span(rufl_action action,
  */
 
 rufl_code rufl_process_span_old(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font, unsigned int font_size, unsigned int slant,
 		int *x, int y, unsigned int flags,
 		int click_x, size_t *offset,
@@ -546,28 +546,33 @@ int rufl_unicode_map_search_cmp(const void *keyval, const void *datum)
  */
 
 rufl_code rufl_process_not_available(rufl_action action,
-		unsigned short *s, unsigned int n,
+		uint32_t *s, unsigned int n,
 		unsigned int font_size, int *x, int y,
 		unsigned int flags,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context)
 {
-	char missing[] = "0000";
-	int dx = 7 * font_size / 64;
+	char missing[] = "000000";
+	const int dx = 7 * font_size / 64;
+	const int dx3 = 10.5 * font_size / 64;
 	int top_y = y + 5 * font_size / 64;
 	unsigned int i;
 	font_f f;
 	rufl_code code;
 
 	if (action == rufl_WIDTH) {
-		*x += n * dx;
+		for (i = 0; i != n; i++)
+			*x += (s[i] < 0x10000) ? dx : dx3;
 		return rufl_OK;
 	} else if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
-		if (click_x - *x < (int) (n * dx))
-			*offset = (click_x - *x) / dx;
-		else
-			*offset = n;
-		*x += *offset * dx;
+		int width = 0;
+		for (i = 0; i != n; i++) {
+			if (click_x - *x <= width)
+				break;
+			width += (s[i] < 0x10000) ? dx : dx3;
+		}
+		*offset = i;
+		*x += width;
 		return rufl_OK;
 	}
 
@@ -576,45 +581,50 @@ rufl_code rufl_process_not_available(rufl_action action,
 		return code;
 
 	for (i = 0; i != n; i++) {
-		missing[0] = "0123456789abcdef"[(s[i] >> 12) & 0xf];
-		missing[1] = "0123456789abcdef"[(s[i] >> 8) & 0xf];
-		missing[2] = "0123456789abcdef"[(s[i] >> 4) & 0xf];
-		missing[3] = "0123456789abcdef"[(s[i] >> 0) & 0xf];
+		int offset = (s[i] < 0x10000) ? 2 : 0;
+		int step = (s[i] < 0x10000) ? 2 : 3;
+
+		missing[0] = "0123456789abcdef"[(s[i] >> 20) & 0xf];
+		missing[1] = "0123456789abcdef"[(s[i] >> 16) & 0xf];
+		missing[2] = "0123456789abcdef"[(s[i] >> 12) & 0xf];
+		missing[3] = "0123456789abcdef"[(s[i] >> 8) & 0xf];
+		missing[4] = "0123456789abcdef"[(s[i] >> 4) & 0xf];
+		missing[5] = "0123456789abcdef"[(s[i] >> 0) & 0xf];
 
 		/* first two characters in top row */
 		if (action == rufl_PAINT) {
-			rufl_fm_error = xfont_paint(f, missing, font_OS_UNITS |
-					font_GIVEN_LENGTH | font_GIVEN_FONT |
-					font_KERN |
+			rufl_fm_error = xfont_paint(f, missing + offset,
+					font_OS_UNITS | font_GIVEN_LENGTH |
+					font_GIVEN_FONT | font_KERN |
 					((flags & rufl_BLEND_FONT) ?
 							font_BLEND_FONT : 0),
-					*x, top_y, 0, 0, 2);
+					*x, top_y, 0, 0, step);
 			if (rufl_fm_error)
 				return rufl_FONT_MANAGER_ERROR;
 		} else {
 			callback(context, "Corpus.Medium\\ELatin1",
-					font_size / 2, missing, 0, 2,
-					*x, top_y);
+					font_size / 2, missing + offset, 0,
+					step, *x, top_y);
 		}
 
 		/* last two characters underneath */
 		if (action == rufl_PAINT) {
-			rufl_fm_error = xfont_paint(f, missing + 2,
+			rufl_fm_error = xfont_paint(f, missing + offset + step,
 					font_OS_UNITS |
 					font_GIVEN_LENGTH | font_GIVEN_FONT |
 					font_KERN |
 					((flags & rufl_BLEND_FONT) ?
 							font_BLEND_FONT : 0),
-					*x, y, 0, 0, 2);
+					*x, y, 0, 0, step);
 			if (rufl_fm_error)
 				return rufl_FONT_MANAGER_ERROR;
 		} else {
 			callback(context, "Corpus.Medium\\ELatin1",
-					font_size / 2, missing + 2, 0, 2,
-					*x, y);
+					font_size / 2, missing + offset + step,
+					0, step, *x, y);
 		}
 
-		*x += dx;
+		*x += (s[i] < 0x10000) ? dx : dx3;
 	}
 
 	return rufl_OK;
