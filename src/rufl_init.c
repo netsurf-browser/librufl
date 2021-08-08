@@ -79,8 +79,12 @@ static rufl_code rufl_init_scan_font_old(unsigned int font_index);
 static rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
 		const char *encoding, struct rufl_character_set *charset,
 		struct rufl_unicode_map *umap, unsigned int *last);
-static rufl_code rufl_init_read_encoding(font_f font,
+static rufl_code rufl_init_populate_unicode_map(font_f f,
 		struct rufl_unicode_map *umap);
+static rufl_code rufl_init_read_encoding(font_f font,
+		rufl_code (*callback)(void *pw,
+			uint32_t glyph_idx, uint32_t ucs4),
+		void *pw);
 static int rufl_glyph_map_cmp(const void *keyval, const void *datum);
 static int rufl_unicode_map_cmp(const void *z1, const void *z2);
 static rufl_code rufl_init_substitution_table(void);
@@ -935,7 +939,7 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 		return rufl_FONT_MANAGER_ERROR;
 	}
 
-	code = rufl_init_read_encoding(font, umap);
+	code = rufl_init_populate_unicode_map(font, umap);
 	if (code != rufl_OK) {
 		LOG("rufl_init_read_encoding(\"%s\", ...): 0x%x",
 				buf, code);
@@ -1003,21 +1007,58 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 	return rufl_OK;
 }
 
+static rufl_code rufl_init_umap_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
+{
+	struct rufl_unicode_map *umap = pw;
+	rufl_code result = rufl_OK;
+
+	/* Ignore first 32 character codes (these are control chars) */
+	if (glyph_idx > 31 && glyph_idx < 256 && umap->entries < 256) {
+		umap->map[umap->entries].u = ucs4;
+		umap->map[umap->entries].c = glyph_idx;
+		umap->entries++;
+		if (umap->entries == 256)
+			result = rufl_IO_EOF;
+	}
+
+	return result;
+}
 
 /**
- * Parse an encoding file and fill in a rufl_unicode_map.
+ * Populate a unicode map by parsing the font's encoding file
+ */
+
+rufl_code rufl_init_populate_unicode_map(font_f f,
+		struct rufl_unicode_map *umap)
+{
+	rufl_code result;
+
+	umap->entries = 0;
+
+	result = rufl_init_read_encoding(f, rufl_init_umap_cb, &umap);
+	if (result == rufl_OK) {
+		/* sort by unicode */
+		qsort(umap->map, umap->entries, sizeof umap->map[0],
+				rufl_unicode_map_cmp);
+	}
+	return result;
+}
+
+/**
+ * Parse an encoding file
  */
 
 rufl_code rufl_init_read_encoding(font_f font,
-		struct rufl_unicode_map *umap)
+		rufl_code (*callback)(void *pw,
+			uint32_t glyph_idx, uint32_t ucs4),
+		void *pw)
 {
 	enum {
 		STATE_START,
 		STATE_COMMENT,
 		STATE_COLLECT,
 	} state = STATE_START;
-	bool emit = false;
-	unsigned int u = 0;
+	bool emit = false, done = false;
 	unsigned int i = 0;
 	unsigned int n = 0;
 	int c;
@@ -1041,7 +1082,7 @@ rufl_code rufl_init_read_encoding(font_f font,
 	if (!fp)
 		return rufl_IO_ERROR;
 
-	while (!feof(fp) && i < 256 && u < 256) {
+	while (!feof(fp) && !done) {
 		c = fgetc(fp);
 
 		if (state == STATE_START) {
@@ -1083,8 +1124,8 @@ rufl_code rufl_init_read_encoding(font_f font,
 			}
 		}
 
-		/* Ignore first 32 character codes (these are control chars) */
-		if (emit && i > 31 && i < 256 && u < 256) {
+		if (emit) {
+			emit = false;
 			entry = bsearch(s, rufl_glyph_map,
 					rufl_glyph_map_size,
 					sizeof rufl_glyph_map[0],
@@ -1096,27 +1137,19 @@ rufl_code rufl_init_read_encoding(font_f font,
 					entry--;
 				for (; strcmp(s, entry->glyph_name) == 0;
 						entry++) {
-					umap->map[u].u = entry->u;
-					umap->map[u].c = i;
-					u++;
-					if (u == 256)
+					if (callback(pw, i,
+							entry->u) != rufl_OK) {
+						done = true;
 						break;
+					}
 				}
 			}
-		}
-
-		if (emit) {
 			i++;
-			emit = false;
 		}
 	}
 
 	if (fclose(fp) == EOF)
 		return rufl_IO_ERROR;
-
-	/* sort by unicode */
-	qsort(umap->map, u, sizeof umap->map[0], rufl_unicode_map_cmp);
-	umap->entries = u;
 
 	return rufl_OK;
 }
