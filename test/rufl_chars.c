@@ -18,12 +18,12 @@
 unsigned int font = 0;
 unsigned int weight = rufl_WEIGHT_400;
 bool italic = false;
+unsigned int plane = 0;
 
 
 static rufl_code redraw(int x, int y, int y0, int y1);
 static void try(rufl_code code, const char *context);
 static void die(const char *error);
-
 
 int main(void)
 {
@@ -73,7 +73,7 @@ int main(void)
 
 	try(rufl_init(), "rufl_init");
 
-	menu = malloc(wimp_SIZEOF_MENU(10 + rufl_family_list_entries));
+	menu = malloc(wimp_SIZEOF_MENU(27 + rufl_family_list_entries));
 	if (!menu)
 		die("Out of memory");
 	strcpy(menu->title_data.text, "Fonts");
@@ -99,23 +99,37 @@ int main(void)
 			(wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
 			(wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
 	strcpy(menu->entries[9].data.text, "Italic");
-	for (i = 0; i != rufl_family_list_entries; i++) {
-		menu->entries[10 + i].menu_flags = 0;
+	for (i = 0; i != 17; i++) {
+		menu->entries[10 + i].menu_flags =
+				(i == 16 ? wimp_MENU_SEPARATE :0);
 		menu->entries[10 + i].sub_menu = wimp_NO_SUB_MENU;
 		menu->entries[10 + i].icon_flags = wimp_ICON_TEXT |
+			      (wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
+			      (wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
+		strcpy(menu->entries[10 + i].data.text, "Plane  1");
+		menu->entries[10 + i].data.text[6] = '0' + (i+1)/10;
+		if (menu->entries[10 + i].data.text[6] == '0')
+			menu->entries[10 + i].data.text[6] = ' ';
+		menu->entries[10 + i].data.text[7] = '0' + (i+1)%10;
+	}
+	for (i = 0; i != rufl_family_list_entries; i++) {
+		menu->entries[27 + i].menu_flags = 0;
+		menu->entries[27 + i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[27 + i].icon_flags = wimp_ICON_TEXT |
 				wimp_ICON_INDIRECTED |
 			(wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
 			(wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
-		menu->entries[10 + i].data.indirected_text.text =
+		menu->entries[27 + i].data.indirected_text.text =
 				(char *) rufl_family_list[i];
-		menu->entries[10 + i].data.indirected_text.validation =
+		menu->entries[27 + i].data.indirected_text.validation =
 				(char *) -1;
-		menu->entries[10 + i].data.indirected_text.size =
+		menu->entries[27 + i].data.indirected_text.size =
 				strlen(rufl_family_list[i]);
 	}
 	menu->entries[3].menu_flags |= wimp_MENU_TICKED;
 	menu->entries[10].menu_flags |= wimp_MENU_TICKED;
-	menu->entries[i + 9].menu_flags |= wimp_MENU_LAST;
+	menu->entries[27].menu_flags |= wimp_MENU_TICKED;
+	menu->entries[i + 26].menu_flags |= wimp_MENU_LAST;
 
 	error = xwimp_create_window((wimp_window *) &window, &w);
 	if (error)
@@ -194,11 +208,17 @@ int main(void)
 			} else if (block.selection.items[0] == 9) {
 				italic = !italic;
 				menu->entries[9].menu_flags ^= wimp_MENU_TICKED;
-			} else {
-				menu->entries[10 + font].menu_flags ^=
+			} else if (block.selection.items[0] <= 26) {
+				menu->entries[10 + plane].menu_flags ^=
 						wimp_MENU_TICKED;
-				font = block.selection.items[0] - 10;
-				menu->entries[10 + font].menu_flags ^=
+				plane = block.selection.items[0] - 10;
+				menu->entries[10 + plane].menu_flags ^=
+						wimp_MENU_TICKED;
+			} else {
+				menu->entries[27 + font].menu_flags ^=
+						wimp_MENU_TICKED;
+				font = block.selection.items[0] - 27;
+				menu->entries[27 + font].menu_flags ^=
 						wimp_MENU_TICKED;
 			}
 			error = xwimp_force_redraw(w,
@@ -249,15 +269,21 @@ rufl_code redraw(int x, int y, int y0, int y1)
 	rufl_style style = weight | (italic ? rufl_SLANTED : 0);
 
 	for (u = y0 / 40 * 32; (int) u != (y1 / 40 + 1) * 32; u++) {
-		if (u <= 0x7f)
-			s[0] = u, l = 1;
-		else if (u <= 0x7ff)
-			s[0] = 0xc0 | (u >> 6),
-			s[1] = 0x80 | (u & 0x3f), l = 2;
-		else if (u <= 0xffff)
-			s[0] = 0xe0 | (u >> 12),
-			s[1] = 0x80 | ((u >> 6) & 0x3f),
-			s[2] = 0x80 | (u & 0x3f), l = 3;
+		unsigned int c = (plane << 16) | u;
+		if (c <= 0x7f)
+			s[0] = c, l = 1;
+		else if (c <= 0x7ff)
+			s[0] = 0xc0 | (c >> 6),
+			s[1] = 0x80 | (c & 0x3f), l = 2;
+		else if (c <= 0xffff)
+			s[0] = 0xe0 | (c >> 12),
+			s[1] = 0x80 | ((c >> 6) & 0x3f),
+			s[2] = 0x80 | (c & 0x3f), l = 3;
+		else if (c <= 0x10ffff)
+			s[0] = 0xf0 | (c >> 18),
+			s[1] = 0x80 | ((c >> 12) & 0x3f),
+			s[2] = 0x80 | ((c >> 6) & 0x3f),
+			s[3] = 0x80 | (c & 0x3f), l = 4;
 		else
 			break;
 		s[l] = 0;
