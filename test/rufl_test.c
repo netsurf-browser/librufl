@@ -25,7 +25,8 @@ static void callback(void *context,
 int main(void)
 {
 	char utf8_test[] = "Hello,	world! ὕαλον "
-			"Uherské Hradiště. 𐀀";
+			"Uherské Hradiště. 𐀀"
+			"\xf0\xa0\x80\xa1";
 	int width;
 	size_t char_offset;
 	int x;
