@@ -44,6 +44,5 @@ void rufl_quit(void)
         free(rufl_family_menu);
         rufl_family_menu = 0;
 
-        free(rufl_substitution_table);
-        rufl_substitution_table = 0;
+	rufl_substitution_table_fini();
 }

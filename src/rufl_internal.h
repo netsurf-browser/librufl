@@ -158,10 +158,7 @@ extern struct rufl_family_map_entry *rufl_family_map;
 
 
 /** No font contains this character. */
-#define NOT_AVAILABLE 65535
-/** Font substitution table. */
-extern unsigned short *rufl_substitution_table;
-
+#define NOT_AVAILABLE 0xffff
 
 /** Number of slots in recent-use cache. This is the maximum number of RISC OS
  * font handles that will be used at any time by the library. */
@@ -203,6 +200,10 @@ rufl_code rufl_find_font(unsigned int font, unsigned int font_size,
 bool rufl_character_set_test(const struct rufl_character_set *charset,
 		uint32_t u);
 
+rufl_code rufl_substitution_table_init(void);
+void rufl_substitution_table_fini(void);
+unsigned int rufl_substitution_table_lookup(uint32_t u);
+void rufl_substitution_table_dump(void);
 
 #define rufl_utf8_read(s, l, u)						       \
 	if (4 <= l && ((s[0] & 0xf8) == 0xf0) && ((s[1] & 0xc0) == 0x80) &&    \

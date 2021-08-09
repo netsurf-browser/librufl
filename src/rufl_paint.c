@@ -225,10 +225,8 @@ rufl_code rufl_process(rufl_action action,
 		font1 = NOT_AVAILABLE;
 	else if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
-	else if (u < 0x10000)
-		font1 = rufl_substitution_table[u];
 	else
-		font1 = NOT_AVAILABLE;
+		font1 = rufl_substitution_table_lookup(u);
 	do {
 		s[0] = u;
 		offset_map[0] = offset_u;
@@ -244,10 +242,8 @@ rufl_code rufl_process(rufl_action action,
 				font1 = NOT_AVAILABLE;
 			else if (charset && rufl_character_set_test(charset, u))
 				font1 = font;
-			else if (u < 0x10000)
-				font1 = rufl_substitution_table[u];
 			else
-				font1 = NOT_AVAILABLE;
+				font1 = rufl_substitution_table_lookup(u);
 			if (font1 == font0)
 				n++;
 		}

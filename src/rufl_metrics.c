@@ -139,10 +139,11 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	rufl_utf8_read(string, length, u);
 	if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
-	else if (u < 0x10000)
-		font1 = rufl_substitution_table[u];
-	else
-		font1 = rufl_CACHE_CORPUS;
+	else {
+		font1 = rufl_substitution_table_lookup(u);
+		if (font1 == NOT_AVAILABLE)
+			font1 = rufl_CACHE_CORPUS;
+	}
 
 	/* Old font managers need the font encoding, too */
 	if (rufl_old_font_manager && font1 != rufl_CACHE_CORPUS) {

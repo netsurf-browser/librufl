@@ -12,7 +12,6 @@
 static void rufl_dump_character_set_list(
 		const struct rufl_character_set *charset);
 static void rufl_dump_unicode_map(struct rufl_unicode_map *umap);
-static void rufl_dump_substitution_table(void);
 
 
 /**
@@ -66,7 +65,7 @@ void rufl_dump_state(void)
 	}
 
 	printf("rufl_substitution_table:\n");
-	rufl_dump_substitution_table();
+	rufl_substitution_table_dump();
 }
 
 
@@ -131,26 +130,4 @@ void rufl_dump_unicode_map(struct rufl_unicode_map *umap)
 
 	for (i = 0; i != umap->entries; i++)
 		printf("%x:%x ", umap->map[i].u, umap->map[i].c);
-}
-
-
-/**
- * Dump a representation of the substitution table to stdout.
- */
-
-void rufl_dump_substitution_table(void)
-{
-	unsigned int font;
-	unsigned int u, t;
-
-	u = 0;
-	while (u != 0x10000) {
-		t = u;
-		font = rufl_substitution_table[t];
-		while (u != 0x10000 && font == rufl_substitution_table[u])
-			u++;
-		if (font != NOT_AVAILABLE)
-			printf("  %x-%x => %u \"%s\"\n", t, u - 1,
-					font, rufl_font_list[font].identifier);
-	}
 }

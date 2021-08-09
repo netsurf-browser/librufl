@@ -31,7 +31,6 @@ unsigned int rufl_family_list_entries = 0;
 struct rufl_family_map_entry *rufl_family_map = 0;
 os_error *rufl_fm_error = 0;
 void *rufl_family_menu = 0;
-unsigned short *rufl_substitution_table = 0;
 struct rufl_cache_entry rufl_cache[rufl_CACHE_SIZE];
 int rufl_cache_time = 0;
 bool rufl_old_font_manager = false;
@@ -87,7 +86,6 @@ static rufl_code rufl_init_read_encoding(font_f font,
 		void *pw);
 static int rufl_glyph_map_cmp(const void *keyval, const void *datum);
 static int rufl_unicode_map_cmp(const void *z1, const void *z2);
-static rufl_code rufl_init_substitution_table(void);
 static rufl_code rufl_save_cache(void);
 static rufl_code rufl_load_cache(void);
 static int rufl_font_list_cmp(const void *keyval, const void *datum);
@@ -214,9 +212,9 @@ rufl_code rufl_init(void)
 
 	xhourglass_leds(2, 0, 0);
 	xhourglass_colours(0x0000ff, 0x00ffff, &old_sand, &old_glass);
-	code = rufl_init_substitution_table();
+	code = rufl_substitution_table_init();
 	if (code != rufl_OK) {
-		LOG("rufl_init_substitution_table: 0x%x", code);
+		LOG("rufl_substitution_table_init: 0x%x", code);
 		rufl_quit();
 		xhourglass_off();
 		return code;
@@ -1328,66 +1326,6 @@ int rufl_unicode_map_cmp(const void *z1, const void *z2)
 	else if (entry2->u < entry1->u)
 		return 1;
 	return 0;
-}
-
-
-/**
- * Construct the font substitution table.
- */
-
-rufl_code rufl_init_substitution_table(void)
-{
-	unsigned char z;
-	unsigned int i;
-	unsigned int block, byte, bit;
-	unsigned int u;
-	unsigned int index;
-	const struct rufl_character_set *charset;
-
-	rufl_substitution_table = malloc(65536 *
-			sizeof rufl_substitution_table[0]);
-	if (!rufl_substitution_table) {
-		LOG("malloc(%zu) failed", 65536 *
-				sizeof rufl_substitution_table[0]);
-		return rufl_OUT_OF_MEMORY;
-	}
-
-	for (u = 0; u != 0x10000; u++)
-		rufl_substitution_table[u] = NOT_AVAILABLE;
-
-	for (i = 0; i != rufl_font_list_entries; i++) {
-		charset = rufl_font_list[i].charset;
-		if (!charset)
-			continue;
-		for (block = 0; block != 256; block++) {
-			if (charset->index[block] == BLOCK_EMPTY)
-				continue;
-			if (charset->index[block] == BLOCK_FULL) {
-				for (u = block << 8; u != (block << 8) + 256;
-						u++) {
-					if (rufl_substitution_table[u] ==
-							NOT_AVAILABLE)
-						rufl_substitution_table[u] = i;
-				}
-				continue;
-			}
-			index = charset->index[block];
-			for (byte = 0; byte != 32; byte++) {
-				z = charset->block[index][byte];
-				if (z == 0)
-					continue;
-				u = (block << 8) | (byte << 3);
-				for (bit = 0; bit != 8; bit++, u++) {
-					if (rufl_substitution_table[u] ==
-							NOT_AVAILABLE &&
-							z & (1 << bit))
-						rufl_substitution_table[u] = i;
-				}
-			}
-		}
-	}
-
-	return rufl_OK;
 }
 
 
