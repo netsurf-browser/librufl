@@ -14,6 +14,54 @@
 #undef RUFL_SUBSTITUTION_TABLE_DEBUG
 
 /**
+ * Base type for a substitution table.
+ */
+struct rufl_substitution_table {
+	/** Look up a Unicode codepoint. */
+	unsigned int (*lookup)(const struct rufl_substitution_table *t,
+			uint32_t u);
+	/** Free the resources used by this table */
+	void (*free)(struct rufl_substitution_table *t);
+	/** Dump the contents of this table to stdout */
+	void (*dump)(const struct rufl_substitution_table *t,
+			unsigned int plane);
+	/** Compute the storage size of this table */
+	size_t (*size)(const struct rufl_substitution_table *t);
+};
+
+/**
+ * Implementation of a substitution table using direct lookup.
+ */
+struct rufl_substitution_table_direct {
+	struct rufl_substitution_table base;
+
+	/** Table index.
+	 *
+	 * Each entry represents a block of 256 codepoints, so i[k] refers
+	 * to codepoints [256*k, 256*(k+1)). The value is an offset into
+	 * the block table.
+	 */
+	uint8_t index[256];
+
+	/** Bits per block table entry. Will be 8 or 16. */
+	uint8_t bits_per_entry;
+
+	/** Substitution table.
+	 *
+	 * Entries are the index into rufl_font_list of a font providing a
+	 * substitution glyph for this codepoint or NOT_AVAILABLE.
+	 *
+	 * Note that, although this is defined as a 16bit type,
+	 * the actual field width is indicated by bits_per_entry (and,
+	 * if bits_per_entry is 8, then (NOT_AVAILABLE & 0xff) represents
+	 * a missing glyph).
+	 */
+	uint16_t *table;
+};
+
+/**
+ * Implementation of a substitution table using a perfect hash.
+ *
  * A perfect hash constructed at library initialisation time using the
  * CHD algorithm. Hash entries are found via a two-step process:
  *
@@ -23,7 +71,9 @@
  *      displacement value for the bucket to find the index
  *      into the substitution table.
  */
-struct rufl_substitution_table {
+struct rufl_substitution_table_chd {
+	struct rufl_substitution_table base;
+
 	uint32_t num_buckets; /**< Number of buckets in the hash */
 	uint32_t num_slots; /**< Number of slots in the table */
 	/** Substitution table.
@@ -33,18 +83,13 @@ struct rufl_substitution_table {
 	 *    3                   2                   1                   0
 	 *  1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
 	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 * |      Reserved       |            Unicode codepoint            |
-	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 * |            Reserved           |        Font identifier        |
+	 * |       Unicode codepoint       |        Font identifier        |
 	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 *
 	 * where:
 	 *
-	 *   reserved: 11 bits/16 bits
-	 *     These bits are currently unused and must be set to 0.
-	 *
-	 *   unicode codepoint: 21 bits
-	 *     The Unicode codepoint value.
+	 *   unicode codepoint: 16 bits
+	 *     The low 16 bits of the Unicode codepoint value.
 	 *
 	 *   font identifier: 16 bits
 	 *     The index into rufl_font_list of a font providing a
@@ -57,7 +102,7 @@ struct rufl_substitution_table {
 	 * fail, no font provides a suitable glyph and the not available
 	 * path should be taken.
 	 */
-	uint64_t *table;
+	uint32_t *table;
 	uint8_t bits_per_entry; /**< Bits per displacement bitmap entry */
 	/** Displacement bitmap.
 	 *
@@ -67,8 +112,8 @@ struct rufl_substitution_table {
 	 */
 	uint8_t displacement_map[];
 };
-/** Font substitution table */
-static struct rufl_substitution_table *rufl_substitution_table;
+/** Font substitution tables -- one per plane */
+static struct rufl_substitution_table *rufl_substitution_table[17];
 
 /**
  * Round an unsigned 32bit value up to the next power of 2
@@ -170,8 +215,8 @@ static int table_chd_cmp(const void *a, const void *b)
 {
 	/* We're only interested in the CHD metadata here.
 	 * (i.e. the computed value of g(x) and the bucket size) */
-	const uint64_t aa = (*(const uint64_t *) a) & 0x3fe00000ffff0000llu;
-	const uint64_t bb = (*(const uint64_t *) b) & 0x3fe00000ffff0000llu;
+	const uint64_t aa = (*(const uint64_t *) a) & 0x000fffff00000000llu;
+	const uint64_t bb = (*(const uint64_t *) b) & 0x000fffff00000000llu;
 
 	if (aa > bb)
 		return -1;
@@ -214,6 +259,114 @@ static bool test_and_set_bits(uint8_t *bitmap, const uint32_t *idx, size_t len)
 	return result;
 }
 
+static void rufl_substitution_table_free_chd(
+		struct rufl_substitution_table *t)
+{
+	free(((struct rufl_substitution_table_chd *)t)->table);
+	free(t);
+}
+
+
+static unsigned int rufl_substitution_table_lookup_chd(
+		const struct rufl_substitution_table *ts, uint32_t u)
+{
+	const struct rufl_substitution_table_chd *t = (const void *) ts;
+	uint32_t displacement = 0;
+	uint32_t f, g = hash1(u & 0xffff) & (t->num_buckets - 1);
+	uint32_t bits_to_read = t->bits_per_entry;
+	uint32_t offset_bits = g * bits_to_read;
+	const uint8_t *pread = &t->displacement_map[offset_bits >> 3];
+
+	offset_bits &= 7;
+
+	while (bits_to_read > 0) {
+		uint32_t space_available = (8 - offset_bits);
+		if (space_available > bits_to_read)
+			space_available = bits_to_read;
+
+		displacement <<= space_available;
+		displacement |= (*pread & (0xff >> offset_bits)) >>
+				(8 - space_available - offset_bits);
+
+		offset_bits += space_available;
+		if (offset_bits >= 8) {
+			pread++;
+			offset_bits = 0;
+		}
+		bits_to_read -= space_available;
+	}
+
+	f = hash2((u & 0xffff), displacement) & (t->num_slots - 1);
+
+	if ((t->table[f] & 0xffff) != NOT_AVAILABLE &&
+			((t->table[f] >> 16) & 0xffff) == (u & 0xffff))
+		return t->table[f] & 0xffff;
+
+	return NOT_AVAILABLE;
+}
+
+static int table_dump_cmp(const void *a, const void *b)
+{
+	const uint32_t aa = (*(const uint32_t *) a);
+	const uint32_t bb = (*(const uint32_t *) b);
+
+	if (aa > bb)
+		return 1;
+	else if (aa < bb)
+		return -1;
+	return 0;
+}
+
+static void rufl_substitution_table_dump_chd(
+		const struct rufl_substitution_table *ts, unsigned int plane)
+{
+	const struct rufl_substitution_table_chd *t = (const void *) ts;
+	unsigned int font;
+	unsigned int u, prev;
+	uint32_t *table;
+
+	table = malloc(t->num_slots * sizeof(*table));
+	if (table == NULL)
+		return;
+
+	memcpy(table, t->table, t->num_slots * sizeof(*table));
+
+	qsort(table, t->num_slots, sizeof(*table), table_dump_cmp);
+
+	u = 0;
+	while (u < t->num_slots) {
+		prev = u;
+		font = table[prev] & 0xffff;
+		while (u < t->num_slots && font == (table[u] & 0xffff) &&
+				((u == prev) ||
+				 ((table[u - 1] >> 16) ==
+				  ((table[u] >> 16) - 1))))
+			u++;
+		if (font != NOT_AVAILABLE)
+			printf("  %x-%x => %u \"%s\"\n",
+					(plane << 16) | (table[prev] >> 16),
+					(plane << 16) |	(table[u - 1] >> 16),
+					font, rufl_font_list[font].identifier);
+	}
+
+	free(table);
+}
+
+static size_t rufl_substitution_table_size_chd(
+		const struct rufl_substitution_table *ts)
+{
+	const struct rufl_substitution_table_chd *t = (const void *) ts;
+	size_t size = sizeof(*t);
+
+	/* Add on displacement map size */
+	size += (t->num_buckets * t->bits_per_entry + 7) >> 3;
+
+	/* Add on table size */
+	size += t->num_slots * sizeof(*t->table);
+
+	return size;
+}
+
 /**
  * Create the final substitution table from the intermediate parts
  *
@@ -225,12 +378,13 @@ static bool test_and_set_bits(uint8_t *bitmap, const uint32_t *idx, size_t len)
  * \param displacements       Table of displacement values. One per bucket.
  * \param substitution_table  Location to receive result.
  */
-static rufl_code create_substitution_table(uint64_t *table,
+static rufl_code create_substitution_table_chd(uint64_t *table,
 		size_t table_entries, uint32_t buckets, uint32_t range,
 		uint32_t max_displacement, uint32_t *displacements,
 		struct rufl_substitution_table **substitution_table)
 {
-	struct rufl_substitution_table *subst_table;
+	struct rufl_substitution_table_chd *subst_table;
+	uint64_t *t64;
 	size_t subst_table_size;
 	unsigned int i;
 
@@ -239,7 +393,7 @@ static rufl_code create_substitution_table(uint64_t *table,
 			max_displacement, bits_needed(max_displacement));
 #endif
 
-	subst_table_size = offsetof(struct rufl_substitution_table,
+	subst_table_size = offsetof(struct rufl_substitution_table_chd,
 			displacement_map) +
 			((buckets * bits_needed(max_displacement) + 7) >> 3);
 
@@ -248,17 +402,23 @@ static rufl_code create_substitution_table(uint64_t *table,
 		return rufl_OUT_OF_MEMORY;
 
 	/* We know there are at least table_entries in the table, but
-	 * we should now resize it to the size of the target hashtable */
+	 * we should now resize it to the size of the target hashtable.
+	 * We still want each entry to be 64bits wide at this point. */
 	subst_table->table = realloc(table, range * sizeof(*table));
 	if (!subst_table->table) {
 		free(subst_table);
 		return rufl_OUT_OF_MEMORY;
 	}
+	t64 = (uint64_t *) subst_table->table;
 	/* Initialise unused slots */
 	for (i = table_entries; i < range; i++) {
-		subst_table->table[i] = NOT_AVAILABLE;
+		t64[i] = NOT_AVAILABLE;
 	}
 
+	subst_table->base.lookup = rufl_substitution_table_lookup_chd;
+	subst_table->base.free = rufl_substitution_table_free_chd;
+	subst_table->base.dump = rufl_substitution_table_dump_chd;
+	subst_table->base.size = rufl_substitution_table_size_chd;
 	subst_table->num_buckets = buckets;
 	subst_table->num_slots = range;
 	subst_table->bits_per_entry = bits_needed(max_displacement);
@@ -300,32 +460,52 @@ static rufl_code create_substitution_table(uint64_t *table,
 		uint32_t f, g;
 		uint64_t tmp;
 
-		if (subst_table->table[i] == NOT_AVAILABLE) {
+		if (t64[i] == NOT_AVAILABLE) {
 			i++;
 			continue;
 		}
 
-		g = ((subst_table->table[i] >> 53) & 0x1f0000) |
-				((subst_table->table[i] >> 16) & 0xffff);
-		f = hash2((subst_table->table[i] >> 32) & 0x1fffff,
+		g = ((t64[i] >> 32) & 0xffff);
+		f = hash2((t64[i] >> 16) & 0xffff,
 				displacements[g]) & (range - 1);
 
 		/* Exchange this entry with the one in the slot at f.*/
 		if (f != i) {
-			tmp = subst_table->table[f];
-			subst_table->table[f] = subst_table->table[i];
-			subst_table->table[i] = tmp;
+			tmp = t64[f];
+			t64[f] = t64[i];
+			t64[i] = tmp;
 		} else {
 			/* Reconsider this slot unless it already
 			 * had the correct entry */
 			i++;
 		}
 	}
-	/* Strip all the CHD metadata out of the final table */
-	for (i = 0; i < range; i++)
-		subst_table->table[i] &= 0x001fffff0000ffffllu;
+	/* Strip all the CHD metadata out of the final table.
+	 * We can simply drop the top 32bits of each entry by
+	 * compacting the entries. */
+	for (i = 0; i < range; i++) {
+		subst_table->table[i] = t64[i] & 0xffffffffu;
+	}
 
-	*substitution_table = subst_table;
+	/* Shrink the table to its final size. If this fails, leave
+	 * the existing data intact as it's correct -- we just have
+	 * twice the storage usage we need. */
+	table = realloc(subst_table->table,
+			range * sizeof(*subst_table->table));
+	if (table)
+		subst_table->table = (uint32_t *) table;
+
+	*substitution_table = &subst_table->base;
+
+#ifdef RUFL_SUBSTITUTION_TABLE_DEBUG
+	LOG("table size(%zu) entries %zu buckets(%u@%ubpe => %u)",
+			subst_table->num_slots * sizeof(*subst_table->table),
+			table_entries,
+			subst_table->num_buckets,
+			subst_table->bits_per_entry,
+			(subst_table->num_buckets *
+			 subst_table->bits_per_entry + 7) >> 3);
+#endif
 
 	return rufl_OK;
 }
@@ -349,8 +529,8 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 {
 	/** Number of buckets assuming an average bucket size of 4 */
 	const uint32_t buckets = ceil2((table_entries + 3) & ~3);
-	/** Number of output hash slots assuming a load factor of 0.95 */
-	const uint32_t range = ceil2((table_entries * 100)/95);
+	/** Number of output hash slots assuming a load factor of 1 */
+	const uint32_t range = ceil2(table_entries);
 	uint32_t bucket_size, max_displacement = 0;
 	unsigned int i;
 	uint8_t *entries_per_bucket, *bitmap;
@@ -381,21 +561,18 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 
 	/* Compute g(x) for each entry, placing them into buckets */
 	for (i = 0; i < table_entries; i++) {
-		uint32_t g = hash1((table[i] >> 32) & 0x1fffff) & (buckets - 1);
+		uint64_t g = hash1((table[i] >> 16) & 0xffff) & (buckets - 1);
 
-		/* Insert hash into entry (it's 21 bits at most, so
-		 * needs splitting between bits 16-31 and 53-57 of
-		 * the entry) */
-		table[i] |= ((g & 0xffff) << 16);
-		table[i] |= ((uint64_t)(g & 0x1f0000) << 53);
+		/* Insert hash into entry (it's 16 bits at most,
+		 * so use bits 32-47) */
+		table[i] |= ((g & 0xffff) << 32);
 
 		entries_per_bucket[g]++;
 	}
 
 	/* Inject bucket size into entries */
 	for (i = 0; i < table_entries; i++) {
-		uint32_t g = ((table[i] >> 53) & 0x1f0000) |
-			((table[i] >> 16) & 0xffff);
+		uint32_t g = ((table[i] >> 32) & 0xffff);
 
 		/* With a target bucket size of 4, do not expect
 		 * >= twice that number of entries in the largest
@@ -406,11 +583,11 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 			LOG("unexpectedly large bucket %u",
 					entries_per_bucket[g]);
 
-		/* Stash bucket size into bits 58-61 of the entry */
-		table[i] |= ((uint64_t)entries_per_bucket[g] << 58);
+		/* Stash bucket size into bits 48-51 of the entry */
+		table[i] |= ((uint64_t)entries_per_bucket[g] << 48);
 	}
 
-	/* Bits 62-63 of table entries are currently unused */
+	/* Bits 52-63 of table entries are currently unused */
 
 	free(entries_per_bucket);
 
@@ -419,12 +596,11 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 
 	/* Compute f(x) for each bucket, finding a unique mapping */
 	for (i = 0; i < table_entries; i += bucket_size) {
-		const uint32_t g = ((table[i] >> 53) & 0x1f0000) |
-			((table[i] >> 16) & 0xffff);
+		const uint32_t g = ((table[i] >> 32) & 0xffff);
 		uint32_t hashes[8], num_hashes;
 		uint32_t d = 0;
 
-		bucket_size = ((table[i] >> 58) & 0xf);
+		bucket_size = ((table[i] >> 48) & 0xf);
 
 		do {
 			uint32_t j, k;
@@ -434,7 +610,7 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 
 			for (j = 0; j != bucket_size; j++) {
 				uint32_t f = hash2(
-					(table[i+j] >> 32) & 0x1fffff, d) &
+					(table[i+j] >> 16) & 0xffff, d) &
 					(range - 1);
 				for (k = 0; k < num_hashes; k++) {
 					if (f == hashes[k])
@@ -455,13 +631,210 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 
 	free(bitmap);
 
-	result = create_substitution_table(table, table_entries,
+	result = create_substitution_table_chd(table, table_entries,
 			buckets, range, max_displacement, displacements,
 			substitution_table);
 	free(displacements);
 
 	return result;
 }
+
+static size_t rufl_substitution_table_estimate_size_chd(size_t table_entries,
+		size_t blocks_used)
+{
+	size_t size = sizeof(struct rufl_substitution_table_chd);
+
+	(void) blocks_used;
+
+	/** Number of buckets assuming an average bucket size of 4 */
+	const uint32_t buckets = ceil2((table_entries + 3) & ~3);
+	/** Number of output hash slots assuming a load factor of 1 */
+	const uint32_t range = ceil2(table_entries);
+
+	/* Conservatively assume 6 bits per displacement map entry */
+	size += (buckets * 6 + 7) >> 3;
+
+	/* Add on table size */
+	size += range * 4;
+
+	return size;
+}
+
+/****************************************************************************/
+
+static void rufl_substitution_table_free_direct(
+		struct rufl_substitution_table *t)
+{
+	free(((struct rufl_substitution_table_direct *)t)->table);
+	free(t);
+}
+
+
+static unsigned int rufl_substitution_table_lookup_direct(
+		const struct rufl_substitution_table *ts, uint32_t u)
+{
+	const struct rufl_substitution_table_direct *t = (const void *) ts;
+	uint32_t block = (u >> 8) & 0xff;
+	uint32_t slot = (u & 0xff);
+	unsigned int font;
+
+	if (t->bits_per_entry == 8) {
+		font = ((uint8_t *) t->table)[t->index[block] * 256 + slot];
+		if (font == (NOT_AVAILABLE & 0xff))
+			font = NOT_AVAILABLE;
+	} else
+		font = t->table[t->index[block] * 256 + slot];
+
+	return font;
+}
+
+static void rufl_substitution_table_dump_direct(
+		const struct rufl_substitution_table *ts, unsigned int plane)
+{
+	const struct rufl_substitution_table_direct *t = (const void *) ts;
+	unsigned int font, na;
+	unsigned int u, prev;
+	uint8_t *t8 = (uint8_t *) t->table;
+
+	na = NOT_AVAILABLE & ((t->bits_per_entry == 8) ? 0xff : 0xffff);
+
+#define LOOKUP(u) (t->bits_per_entry == 8 \
+		? t8[t->index[(u >> 8) & 0xff] * 256 + (u & 0xff)] \
+		: t->table[t->index[(u >> 8) & 0xff] * 256 + (u & 0xff)])
+
+	u = 0;
+	while (u < 0x10000) {
+		prev = u;
+		font = LOOKUP(u);
+		while (u < 0x10000 && font == LOOKUP(u))
+			u++;
+		if (font != na)
+			printf("  %x-%x => %u \"%s\"\n",
+					(plane << 16) | prev,
+					(plane << 16) | (u - 1),
+					font, rufl_font_list[font].identifier);
+	}
+
+#undef LOOKUP
+}
+
+static size_t rufl_substitution_table_size_direct(
+		const struct rufl_substitution_table *ts)
+{
+	const struct rufl_substitution_table_direct *t = (const void *) ts;
+	size_t size = sizeof(*t);
+	unsigned int i, block_idx = 0;
+
+	/* Find the largest block index (blocks are contiguous) */
+	for (i = 0; i < 256; i++)
+		if (t->index[i] > block_idx)
+			block_idx = t->index[i];
+
+	/* Add on table size */
+	size += (t->bits_per_entry * (block_idx + 1) * 256) >> 3;
+
+	return size;
+}
+
+/**
+ * Construct a direct-mapped substitution table
+ */
+static rufl_code direct(uint64_t *table, size_t table_entries,
+		size_t blocks_used, const uint8_t block_histogram[256],
+		struct rufl_substitution_table **substitution_table)
+{
+	struct rufl_substitution_table_direct *subst_table;
+	size_t blocks_needed, table_size;
+	unsigned int i, block;
+
+	subst_table = calloc(sizeof(*subst_table), 1);
+	if (!subst_table)
+		return rufl_OUT_OF_MEMORY;
+
+	subst_table->base.lookup = rufl_substitution_table_lookup_direct;
+	subst_table->base.free = rufl_substitution_table_free_direct;
+	subst_table->base.dump = rufl_substitution_table_dump_direct;
+	subst_table->base.size = rufl_substitution_table_size_direct;
+	/* We can use 8bits per entry if there are fewer than 255 fonts */
+	subst_table->bits_per_entry = rufl_font_list_entries < 255 ? 8 : 16;
+
+	/* Need one extra block if there's at least one free */
+	blocks_needed = (blocks_used < 256) ?
+			(blocks_used + 1) : blocks_used;
+
+	table_size = (256 * blocks_needed * subst_table->bits_per_entry) >> 3;
+
+	/* Populate block index */
+	for (i = 0, block = 0; i != 256; i++) {
+		if (block_histogram[i] == 0) {
+			subst_table->index[i] = blocks_used;
+		} else {
+			subst_table->index[i] = block;
+			block++;
+		}
+	}
+
+#ifdef RUFL_SUBSTITUTION_TABLE_DEBUG
+	LOG("blocks-used = %zu blocks-needed = %zu"
+		       " bits-per-entry = %u size = %zu",
+		       blocks_used, blocks_needed, subst_table->bits_per_entry,
+		       table_size);
+#endif
+
+	/* Allocate table */
+	//XXX: can we just rearrange the existing one in-place?
+	subst_table->table = malloc(table_size);
+	if (!subst_table->table) {
+		free(subst_table);
+		return rufl_OUT_OF_MEMORY;
+	}
+	/* Fill it with NOT_AVAILABLE */
+	if (subst_table->bits_per_entry == 8) {
+		memset(subst_table->table, (NOT_AVAILABLE & 0xff), table_size);
+	} else {
+		for (i = 0; i < table_size; i++)
+			subst_table->table[i] = NOT_AVAILABLE;
+	}
+
+	/* Populate the table */
+	for (i = 0; i < table_entries; i++) {
+		uint64_t val = table[i];
+		uint32_t slot = (val >> 16) & 0xff;
+		block = subst_table->index[(val >> 24) & 0xff];
+
+		if (subst_table->bits_per_entry == 8) {
+			uint8_t *t8 = (uint8_t *) subst_table->table;
+			t8[256 * block + slot] = (val & 0xff);
+		} else {
+			subst_table->table[256 * block + slot] = (val & 0xffff);
+		}
+	}
+
+	free(table);
+
+	*substitution_table = &subst_table->base;
+
+	return rufl_OK;
+}
+
+static size_t rufl_substitution_table_estimate_size_direct(size_t table_entries,
+		size_t blocks_used)
+{
+	size_t size = sizeof(struct rufl_substitution_table_direct);
+
+	(void) table_entries;
+
+	/* Add one for empty block */
+	if (blocks_used < 256)
+		blocks_used += 1;
+
+	/* We can use 8bits per entry if there are fewer than 255 fonts */
+	size += blocks_used * 256 * (rufl_font_list_entries < 255 ? 1 : 2);
+
+	return size;
+}
+
+/****************************************************************************/
 
 /**
  * Populate the substitution map for a given block
@@ -492,20 +865,23 @@ static void fill_map_for_block(const struct rufl_character_set **charsets,
 	}
 }
 
-
 /**
- * Construct the font substitution table.
+ * Create a substitution table for the plane specified
  */
-
-rufl_code rufl_substitution_table_init(void)
+static rufl_code create_substitution_table_for_plane(unsigned int plane)
 {
 	unsigned int i;
-	unsigned int plane, block;
+	unsigned int block;
 	unsigned int u;
 	const struct rufl_character_set **charsets;
+	const struct rufl_character_set *charset;
+	unsigned int num_charsets;
 	uint64_t *table;
 	size_t table_size;
 	size_t table_entries;
+	uint8_t block_histogram[256];
+	size_t blocks_used;
+	size_t direct_size, chd_size;
 	rufl_code result;
 
 	charsets = malloc(rufl_font_list_entries * sizeof(*charsets));
@@ -513,6 +889,34 @@ rufl_code rufl_substitution_table_init(void)
 		LOG("malloc(%zu) failed",
 				rufl_font_list_entries * sizeof(*charsets));
 		return rufl_OUT_OF_MEMORY;
+	}
+
+	/* Find fonts that have charsets for this plane */
+	num_charsets = 0;
+	for (i = 0; i != rufl_font_list_entries; i++) {
+		charset = rufl_font_list[i].charset;
+		if (!charset) {
+			charsets[i] = NULL;
+			continue;
+		}
+
+		while (PLANE_ID(charset->metadata) != plane &&
+				EXTENSION_FOLLOWS(charset->metadata)) {
+			charset = (void *)(((uint8_t *)charset) +
+					PLANE_SIZE(charset->metadata));
+		}
+		if (PLANE_ID(charset->metadata) != plane)
+			charset = NULL;
+		charsets[i] = charset;
+		num_charsets++;
+	}
+	if (num_charsets == 0) {
+#ifdef RUFL_SUBSTITUTION_TABLE_DEBUG
+		LOG("no charsets for plane %u", plane);
+#endif
+		rufl_substitution_table[plane] = NULL;
+		free(charsets);
+		return rufl_OK;
 	}
 
 	table = malloc(1024 * sizeof(*table));
@@ -524,76 +928,80 @@ rufl_code rufl_substitution_table_init(void)
 	table_size = 1024;
 	table_entries = 0;
 
-	for (plane = 0; plane < 17; plane++) {
-		const struct rufl_character_set *charset;
-		unsigned int num_charsets = 0;
+	/* Process each block, finding fonts that have glyphs */
+	blocks_used = 0;
+	memset(block_histogram, 0, 256);
+	for (block = 0; block != 256; block++) {
+		size_t prev_table_entries = table_entries;
+		uint16_t map_for_block[256];
+		for (i = 0; i != 256; i++)
+			map_for_block[i] = NOT_AVAILABLE;
 
-		/* Find fonts that have charsets for this plane */
-		for (i = 0; i != rufl_font_list_entries; i++) {
-			charset = rufl_font_list[i].charset;
-			if (!charset) {
-				charsets[i] = NULL;
+		fill_map_for_block(charsets, block, map_for_block);
+
+		/* Merge block map into table */
+		for (i = 0; i != 256; i++) {
+			if (map_for_block[i] == NOT_AVAILABLE)
 				continue;
-			}
 
-			while (PLANE_ID(charset->metadata) != plane &&
-					EXTENSION_FOLLOWS(charset->metadata)) {
-				charset = (void *)(((uint8_t *)charset) +
-						PLANE_SIZE(charset->metadata));
-			}
-			if (PLANE_ID(charset->metadata) != plane)
-				charset = NULL;
-			charsets[i] = charset;
-			num_charsets++;
-		}
-		if (num_charsets == 0)
-			continue;
-
-		/* Process each block, finding fonts that have glyphs */
-		for (block = 0; block != 256; block++) {
-			uint16_t map_for_block[256];
-			memset(map_for_block, 0xff, 512);
-
-			fill_map_for_block(charsets, block, map_for_block);
-
-			/* Merge block map into table */
-			for (i = 0; i != 256; i++) {
-				if (map_for_block[i] == NOT_AVAILABLE)
-					continue;
-
-				u = (plane << 16) | (block << 8) | i;
-				table[table_entries] = ((uint64_t) u << 32) |
-							map_for_block[i];
-				if (++table_entries == table_size) {
-					uint64_t *tmp = realloc(table,
-							2 * table_size *
+			u = (block << 8) | i;
+			table[table_entries] = (u << 16) | map_for_block[i];
+			if (++table_entries == table_size) {
+				uint64_t *tmp = realloc(table,
+						2 * table_size *
+						sizeof(*table));
+				if (!tmp) {
+					LOG("realloc(%zu) failed",
+						2 * table_size *
 							sizeof(*table));
-					if (!tmp) {
-						LOG("realloc(%zu) failed",
-								2 * table_size *
-								sizeof(*table));
-						free(table);
-						return rufl_OUT_OF_MEMORY;
-					}
-
-					table = tmp;
-					table_size *= 2;
+					free(table);
+					return rufl_OUT_OF_MEMORY;
 				}
+
+				table = tmp;
+				table_size *= 2;
 			}
 		}
+
+		block_histogram[block] = (table_entries != prev_table_entries);
+		if (block_histogram[block] != 0)
+			blocks_used++;
 	}
 
-	/* Build hash from table */
-	result = chd(table, table_entries, &rufl_substitution_table);
+	if (table_entries == 0) {
+#ifdef RUFL_SUBSTITUTION_TABLE_DEBUG
+		LOG("no glyphs for plane %u", plane);
+#endif
+		rufl_substitution_table[plane] = NULL;
+		free(table);
+		free(charsets);
+		return rufl_OK;
+	}
+
+	/* Build final substitution table using whichever implementation
+	 * estimates the smallest storage requirements. */
+	direct_size = rufl_substitution_table_estimate_size_direct(
+			table_entries, blocks_used);
+	chd_size = rufl_substitution_table_estimate_size_chd(
+			table_entries, blocks_used);
+	if (direct_size <= chd_size) {
+		result = direct(table, table_entries, blocks_used,
+				block_histogram,
+				&rufl_substitution_table[plane]);
+	} else {
+		result = chd(table, table_entries,
+				&rufl_substitution_table[plane]);
+	}
 
 #ifdef RUFL_SUBSTITUTION_TABLE_DEBUG
-	LOG("table size(%zu) entries %zu buckets(%u@%ubpe => %u)",
-			rufl_substitution_table->num_slots * sizeof(*table),
-			table_entries,
-			rufl_substitution_table->num_buckets,
-			rufl_substitution_table->bits_per_entry,
-			(rufl_substitution_table->num_buckets *
-			 rufl_substitution_table->bits_per_entry + 7) >> 3);
+	LOG("plane %u: table-entries = %zu blocks-used = %zu"
+		       " estimated-direct-size = %zu estimated-chd-size = %zu"
+		       " actual-size = %zu",
+			plane, table_entries, blocks_used,
+			direct_size, chd_size,
+			rufl_substitution_table[plane] ?
+				rufl_substitution_table[plane]->size(
+					rufl_substitution_table[plane]) : 0);
 #endif
 
 	free(charsets);
@@ -602,14 +1010,45 @@ rufl_code rufl_substitution_table_init(void)
 }
 
 /**
+ * Construct the font substitution table.
+ */
+
+rufl_code rufl_substitution_table_init(void)
+{
+	unsigned int plane;
+	rufl_code rc;
+
+	for (plane = 0; plane < 17; plane++) {
+		rc = create_substitution_table_for_plane(plane);
+		if (rc != rufl_OK) {
+			while (plane > 0) {
+				plane--;
+				if (!rufl_substitution_table[plane])
+					continue;
+				rufl_substitution_table[plane]->free(
+						rufl_substitution_table[plane]);
+			}
+			return rc;
+		}
+	}
+
+	return rufl_OK;
+}
+
+/**
  * Destroy the substitution table and clean up its resources
  */
 
 void rufl_substitution_table_fini(void)
 {
-	free(rufl_substitution_table->table);
-	free(rufl_substitution_table);
-	rufl_substitution_table = NULL;
+	unsigned int plane;
+
+	for (plane = 0; plane < 17; plane++) {
+		if (rufl_substitution_table[plane] != NULL)
+			rufl_substitution_table[plane]->free(
+					rufl_substitution_table[plane]);
+		rufl_substitution_table[plane] = NULL;
+	}
 }
 
 /**
@@ -618,53 +1057,13 @@ void rufl_substitution_table_fini(void)
 
 unsigned int rufl_substitution_table_lookup(uint32_t u)
 {
-	uint32_t displacement = 0;
-	uint32_t f, g = hash1(u & 0x1ffffff) &
-			(rufl_substitution_table->num_buckets - 1);
-	uint32_t bits_to_read = rufl_substitution_table->bits_per_entry;
-	uint32_t offset_bits = g * bits_to_read;
-	const uint8_t *pread =
-		&rufl_substitution_table->displacement_map[offset_bits >> 3];
+	unsigned int plane = (u >> 16) & 0x1f;
 
-	offset_bits &= 7;
+	if (17 <= plane || !rufl_substitution_table[plane])
+		return NOT_AVAILABLE;
 
-	while (bits_to_read > 0) {
-		uint32_t space_available = (8 - offset_bits);
-		if (space_available > bits_to_read)
-			space_available = bits_to_read;
-
-		displacement <<= space_available;
-		displacement |= (*pread & (0xff >> offset_bits)) >>
-				(8 - space_available - offset_bits);
-
-		offset_bits += space_available;
-		if (offset_bits >= 8) {
-			pread++;
-			offset_bits = 0;
-		}
-		bits_to_read -= space_available;
-	}
-
-	f = hash2((u & 0x1fffff), displacement) &
-			(rufl_substitution_table->num_slots - 1);
-
-	if ((rufl_substitution_table->table[f] & 0xffff) != NOT_AVAILABLE &&
-		((rufl_substitution_table->table[f] >> 32) & 0x1fffff) == u)
-		return rufl_substitution_table->table[f] & 0xffff;
-
-	return NOT_AVAILABLE;
-}
-
-static int table_dump_cmp(const void *a, const void *b)
-{
-	const uint64_t aa = (*(const uint64_t *) a) & 0x001fffff00000000llu;
-	const uint64_t bb = (*(const uint64_t *) b) & 0x001fffff00000000llu;
-
-	if (aa > bb)
-		return 1;
-	else if (aa < bb)
-		return -1;
-	return 0;
+	return rufl_substitution_table[plane]->lookup(
+			rufl_substitution_table[plane], u);
 }
 
 /**
@@ -673,36 +1072,18 @@ static int table_dump_cmp(const void *a, const void *b)
 
 void rufl_substitution_table_dump(void)
 {
-	unsigned int font;
-	unsigned int u, t;
-	uint64_t *table;
+	unsigned int plane;
+	size_t size = 0;
 
-	table = malloc(rufl_substitution_table->num_slots * sizeof(*table));
-	if (table == NULL)
-		return;
-
-	memcpy(table, rufl_substitution_table->table,
-			rufl_substitution_table->num_slots * sizeof(*table));
-
-	qsort(table, rufl_substitution_table->num_slots, sizeof(*table),
-			table_dump_cmp);
-
-	u = 0;
-	while (u < rufl_substitution_table->num_slots) {
-		t = u;
-		font = table[t] & 0xffff;
-		while (u < rufl_substitution_table->num_slots &&
-				font == (table[u] & 0xffff) &&
-				((u == t) ||
-				 (((table[u - 1] >> 32) & 0x1fffff) ==
-				  (((table[u] >> 32) & 0x1fffff) - 1))))
-			u++;
-		if (font != NOT_AVAILABLE)
-			printf("  %llx-%llx => %u \"%s\"\n",
-					(table[t] >> 32) & 0x1fffff,
-					(table[u - 1] >> 32) & 0x1fffff,
-					font, rufl_font_list[font].identifier);
+	for (plane = 0; plane < 17; plane++) {
+		if (!rufl_substitution_table[plane])
+			continue;
+		rufl_substitution_table[plane]->dump(
+				rufl_substitution_table[plane], plane);
+		size += rufl_substitution_table[plane]->size(
+				rufl_substitution_table[plane]);
 	}
 
-	free(table);
+	printf("  Total substitution table storage: %zu bytes\n",
+			size + sizeof(rufl_substitution_table));
 }
