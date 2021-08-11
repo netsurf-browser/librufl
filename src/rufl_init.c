@@ -512,13 +512,10 @@ static struct rufl_character_set *rufl_init_shrinkwrap_planes(
 	/* Shrink-wrap each plane, accumulating total required size as we go */
 	for (u = 0; u < 17; u++) {
 		if (planes[u]) {
-			LOG("shrink-wrapping plane %d", u);
 			rufl_init_shrinkwrap_plane(planes[u]);
 			size += PLANE_SIZE(planes[u]->metadata);
 		}
 	}
-
-	LOG("shrink-wrapped size: %u", size);
 
 	charset = malloc(size);
 	if (!charset)
@@ -530,8 +527,6 @@ static struct rufl_character_set *rufl_init_shrinkwrap_planes(
 	for (u = 17; u > 0; u--) {
 		if (!planes[u-1])
 			continue;
-
-		LOG("merging plane %d", u);
 
 		/* Set E bit if not the last plane */
 		if (pos != size)
@@ -1430,12 +1425,7 @@ rufl_code rufl_save_cache(void)
 		}
 
 		/* character set (all planes) */
-		LOG("writing character sets for %s",
-				rufl_font_list[i].identifier);
 		while (EXTENSION_FOLLOWS(charset->metadata)) {
-			LOG("writing plane %d (%u)",
-					PLANE_ID(charset->metadata),
-					PLANE_SIZE(charset->metadata));
 			if (fwrite(charset, PLANE_SIZE(charset->metadata),
 					1, fp) != 1) {
 				LOG("fwrite: 0x%x: %s", errno, strerror(errno));
@@ -1445,9 +1435,6 @@ rufl_code rufl_save_cache(void)
 			charset = (void *)(((uint8_t *)charset) +
 					PLANE_SIZE(charset->metadata));
 		}
-		LOG("writing plane %d (%u)",
-				PLANE_ID(charset->metadata),
-				PLANE_SIZE(charset->metadata));
 		if (fwrite(charset, PLANE_SIZE(charset->metadata),
 				1, fp) != 1) {
 			LOG("fwrite: 0x%x: %s", errno, strerror(errno));
@@ -1606,7 +1593,6 @@ rufl_code rufl_load_cache(void)
 		identifier[len] = 0;
 
 		/* character set */
-		LOG("reading character sets for %s", identifier);
 		do {
 			if (fread(&metadata, sizeof metadata, 1, fp) != 1) {
 				if (feof(fp))
@@ -1618,9 +1604,6 @@ rufl_code rufl_load_cache(void)
 				break;
 			}
 
-			LOG("reading plane %d (%u)",
-					PLANE_ID(metadata),
-					PLANE_SIZE(metadata));
 			if (!charset) {
 				charset = cur_charset = malloc(
 						PLANE_SIZE(metadata));
