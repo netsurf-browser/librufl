@@ -235,7 +235,7 @@ void rufl_substitution_table_dump(void);
 		u = 0xfffd;						       \
 	}
 
-#define rufl_CACHE "<Wimp$ScrapDir>.RUfl_cache"
+#define rufl_CACHE_TEMPLATE "<Wimp$ScrapDir>.RUfl.CacheNNNN"
 #define rufl_CACHE_VERSION 4
 
 

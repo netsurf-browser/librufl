@@ -14,6 +14,8 @@
 #include <string.h>
 #include <strings.h>
 #include <search.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
@@ -1329,6 +1331,52 @@ int rufl_unicode_map_cmp(const void *z1, const void *z2)
 }
 
 
+static FILE *rufl_open_cache(const char *mode)
+{
+	const unsigned int version = rufl_CACHE_VERSION;
+	size_t len;
+	FILE *fp;
+	char fn[PATH_MAX];
+
+	if (!mode)
+		return NULL;
+
+	strcpy(fn, rufl_CACHE_TEMPLATE);
+	len = strlen(fn);
+
+	/* Fill in version suffix */
+	fn[len-4] = "0123456789abcdef"[(version>>12) & 0xf];
+	fn[len-3] = "0123456789abcdef"[(version>> 8) & 0xf];
+	fn[len-2] = "0123456789abcdef"[(version>> 4) & 0xf];
+	fn[len-1] = "0123456789abcdef"[version & 0xf];
+
+	if (mode[0] == 'a' || mode[0] == 'w') {
+		/* Wind back to directory separator */
+		while (len > 0 && fn[len] != '.')
+			len--;
+		if (len == 0) {
+			LOG("%s", "Malformed cache location");
+			return NULL;
+		}
+
+		/* Ensure directory exists */
+		fn[len] = '\0';
+		if (mkdir(fn, 0755) == -1 && errno != EEXIST) {
+			LOG("mkdir: 0x%x: %s", errno, strerror(errno));
+			return NULL;
+		}
+		fn[len] = '.';
+	}
+
+	fp = fopen(fn, mode);
+	if (!fp) {
+		LOG("fopen: 0x%x: %s", errno, strerror(errno));
+		return NULL;;
+	}
+
+	return fp;
+}
+
 /**
  * Save character sets to cache.
  */
@@ -1340,11 +1388,9 @@ rufl_code rufl_save_cache(void)
 	size_t len;
 	FILE *fp;
 
-	fp = fopen(rufl_CACHE, "wb");
-	if (!fp) {
-		LOG("fopen: 0x%x: %s", errno, strerror(errno));
+	fp = rufl_open_cache("wb");
+	if (!fp)
 		return rufl_OK;
-	}
 
 	/* cache format version */
 	if (fwrite(&version, sizeof version, 1, fp) != 1) {
@@ -1494,11 +1540,9 @@ rufl_code rufl_load_cache(void)
 	struct rufl_unicode_map *umap = NULL;
 	unsigned int num_umaps = 0;
 
-	fp = fopen(rufl_CACHE, "rb");
-	if (!fp) {
-		LOG("fopen: 0x%x: %s", errno, strerror(errno));
+	fp = rufl_open_cache("rb");
+	if (!fp)
 		return rufl_OK;
-	}
 
 	/* cache format version */
 	if (fread(&version, sizeof version, 1, fp) != 1) {
