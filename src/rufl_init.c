@@ -60,11 +60,13 @@ const struct rufl_weight_table_entry rufl_weight_table[] = {
 	{ "ExtraLight", 1 },
 	{ "Heavy", 8 },
 	{ "Light", 2 },
+	{ "MedBold", 6 },
 	{ "Medium", 5 },
 	{ "Regular", 4 },
 	{ "Semi", 6 },
 	{ "SemiBold", 6 },
 	{ "SemiLight", 3 },
+	{ "Thin", 1 },
 	{ "UltraBlack", 9 },
 	{ "UltraBold", 9 },
 };
