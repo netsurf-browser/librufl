@@ -472,31 +472,26 @@ static void rufl_init_shrinkwrap_plane(struct rufl_character_set *charset)
 		for (byte = 0; byte != 32; byte++)
 			bit &= charset->block[block][byte];
 
-		if (bit == 0xff) {
-			/* Block is full */
 
-			/* Find a block whose index is after this one.
-			 * If such a block exists, move its data into
-			 * this block, as this block's bitmap is now free
-			*/
-			for (byte = 0; byte != 256; byte++) {
-				if (charset->index[byte] < BLOCK_EMPTY &&
-						charset->index[byte] > block) {
-					break;
-				}
-			}
-			if (byte != 256) {
-				memcpy(charset->block[block],
-						charset->block[
-							charset->index[byte]],
-						32);
-				charset->index[byte] = block;
-			}
+		if (bit != 0xff)
+			continue;
 
-			/* Now mark this block as full */
-			charset->index[u] = BLOCK_FULL;
-			last_used--;
+		/* Block is full */
+
+		/* Move subsequent blocks up and rewrite their indices */
+		memmove(charset->block[block],
+				charset->block[block+1],
+				(254-(block+1)) * 32);
+		for (byte = 0; byte != 256; byte++) {
+			if (charset->index[byte] < BLOCK_EMPTY &&
+					charset->index[byte] > block) {
+				charset->index[byte]--;
+			}
 		}
+
+		/* Now mark this block as full */
+		charset->index[u] = BLOCK_FULL;
+		last_used--;
 	}
 
 	/* Fill in this plane's size now we know it */
