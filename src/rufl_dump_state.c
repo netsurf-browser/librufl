@@ -90,7 +90,7 @@ static void rufl_dump_character_set(const struct rufl_character_set *charset)
 				u++;
 			} else {
 				t = u;
-				while (rufl_character_set_test(
+				while (u != 0x10000 && rufl_character_set_test(
 							charset, plane + u))
 					u++;
 				printf("%x-%x ", plane + t, plane + u - 1);
