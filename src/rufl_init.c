@@ -543,16 +543,56 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 			uint32_t glyph_idx, uint32_t ucs4),
 		void *pw)
 {
-	unsigned int u, next;
-	rufl_code result;
+	unsigned int u = 0, next, internal;
+	rufl_code result = rufl_OK;
 
-	if (rufl_broken_font_enumerate_characters)
-		return rufl_init_read_encoding(font, callback, pw);
+	if (rufl_broken_font_enumerate_characters) {
+		/* We know that any codepoints in the first chunk will
+		 * be missed because Font_EnumerateCharacters is broken
+		 * on this version of the Font Manager. Find the first
+		 * codepoint it will report. */
+		unsigned int first;
+		rufl_fm_error = xfont_enumerate_characters(font, 0,
+				(int *) &first, (int *) &internal);
+		if (rufl_fm_error) {
+			LOG("xfont_enumerate_characters(\"%s\", "
+			    "U+%x, ...): 0x%x: %s",
+					font_name, 0,
+					rufl_fm_error->errnum,
+					rufl_fm_error->errmess);
+			return rufl_FONT_MANAGER_ERROR;
+		}
+
+		/* Search the entire space up to the first codepoint it
+		 * reported. */
+		for (u = 0; u != (unsigned int) -1 && u != first; u++) {
+			rufl_fm_error = xfont_enumerate_characters(font, u,
+					(int *) &next, (int *) &internal);
+			if (rufl_fm_error) {
+				LOG("xfont_enumerate_characters(\"%s\", "
+				    "U+%x, ...): 0x%x: %s",
+						font_name, u,
+						rufl_fm_error->errnum,
+						rufl_fm_error->errmess);
+				result = rufl_FONT_MANAGER_ERROR;
+				break;
+			}
+
+			/* Skip unmapped characters */
+			if (internal == (unsigned int) -1)
+				continue;
+
+			/* Character is mapped, emit it */
+			result = callback(pw, internal, u);
+			if (result != rufl_OK)
+				break;
+		}
+
+		/* Now fall through to the normal path */
+	}
 
 	/* Scan through mapped characters */
-	for (u = 0; u != (unsigned int) -1; u = next) {
-		unsigned int internal;
-
+	for (; u != (unsigned int) -1; u = next) {
 		rufl_fm_error = xfont_enumerate_characters(font, u, 
 				(int *) &next, (int *) &internal);
 		if (rufl_fm_error) {
@@ -561,6 +601,7 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 					font_name, u,
 					rufl_fm_error->errnum, 
 					rufl_fm_error->errmess);
+			result = rufl_FONT_MANAGER_ERROR;
 			break;
 		}
 
@@ -1225,13 +1266,9 @@ rufl_code rufl_init_read_encoding(font_f font,
 	}
 
 	fp = fopen(filename, "r");
-	if (!fp) {
+	if (!fp && rufl_old_font_manager) {
 		/* many "symbol" fonts have no encoding file */
-		const char *default_path =
-			"Resources:$.Fonts.Encodings./Default";
-		if (rufl_old_font_manager)
-			default_path = "Resources:$.Fonts.Encodings.Latin1";
-		fp = fopen(default_path, "r");
+		fp = fopen("Resources:$.Fonts.Encodings.Latin1", "r");
 	}
 	if (!fp)
 		return rufl_IO_ERROR;
