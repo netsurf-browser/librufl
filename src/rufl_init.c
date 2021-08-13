@@ -1273,8 +1273,9 @@ rufl_code rufl_init_read_encoding(font_f font,
 					(c >= 'a' && c <= 'z') ||
 					(c >= 'A' && c <= 'Z') ||
 					(c == '.') || (c == '_') ||
-					(c == ';')) {
-				/* Printable: append */
+					(c == ';') ||
+					(c == ' ' && s[0] != '/')) {
+				/* Printable (or space in new-style): append */
 				s[n++] = c;
 				if (n >= sizeof(s)) {
 					/* Too long: garbage */
