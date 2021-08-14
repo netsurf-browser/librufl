@@ -1118,7 +1118,7 @@ rufl_code rufl_init_populate_unicode_map(font_f f,
 
 	umap->entries = 0;
 
-	result = rufl_init_read_encoding(f, rufl_init_umap_cb, &umap);
+	result = rufl_init_read_encoding(f, rufl_init_umap_cb, umap);
 	if (result == rufl_OK) {
 		/* sort by unicode */
 		qsort(umap->map, umap->entries, sizeof umap->map[0],
