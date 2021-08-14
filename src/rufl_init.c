@@ -886,7 +886,10 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 				rufl_fm_error->errnum !=
 					error_FILE_NOT_FOUND &&
 				rufl_fm_error->errnum !=
-					error_FONT_ENCODING_NOT_FOUND)) {
+					error_FONT_ENCODING_NOT_FOUND &&
+				/* Neither is a too modern font */
+				rufl_fm_error->errnum !=
+					error_FONT_TOO_MANY_CHUNKS)) {
 				free(charset);
 				for (i = 0; i < num_umaps; i++)
 					free((umap + i)->encoding);
@@ -950,7 +953,10 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 				rufl_fm_error->errnum !=
 					error_FILE_NOT_FOUND &&
 				rufl_fm_error->errnum !=
-					error_FONT_ENCODING_NOT_FOUND)) {
+					error_FONT_ENCODING_NOT_FOUND &&
+				/* Neither is a too modern font */
+				rufl_fm_error->errnum !=
+					error_FONT_TOO_MANY_CHUNKS)) {
 				free(charset);
 				for (i = 0; i < num_umaps; i++)
 					free((umap + i)->encoding);
