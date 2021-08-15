@@ -870,7 +870,20 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 
 		code = rufl_init_scan_font_in_encoding(font_name, encoding,
 				charset, umap + (num_umaps - 1), &last_used);
-		if (code != rufl_OK) {
+		/* Not finding the font isn't fatal */
+		if (code == rufl_FONT_MANAGER_ERROR &&
+				(rufl_fm_error->errnum ==
+					error_FONT_NOT_FOUND ||
+				rufl_fm_error->errnum ==
+					error_FILE_NOT_FOUND ||
+				rufl_fm_error->errnum ==
+					error_FONT_ENCODING_NOT_FOUND ||
+				/* Neither is a too modern font */
+				rufl_fm_error->errnum ==
+					error_FONT_TOO_MANY_CHUNKS)) {
+			/* Ensure we reuse the currently allocated umap */
+			num_umaps--;
+		} else if (code != rufl_OK) {
 			LOG("rufl_init_scan_font_in_encoding(\"%s\", \"%s\", "
 			    "...): 0x%x (0x%x: %s)",
 					font_name, encoding, code,
@@ -879,26 +892,11 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 					code == rufl_FONT_MANAGER_ERROR ?
 						rufl_fm_error->errmess : "");
 
-			/* Not finding the font isn't fatal */
-			if (code != rufl_FONT_MANAGER_ERROR ||
-				(rufl_fm_error->errnum != 
-					error_FONT_NOT_FOUND &&
-				rufl_fm_error->errnum !=
-					error_FILE_NOT_FOUND &&
-				rufl_fm_error->errnum !=
-					error_FONT_ENCODING_NOT_FOUND &&
-				/* Neither is a too modern font */
-				rufl_fm_error->errnum !=
-					error_FONT_TOO_MANY_CHUNKS)) {
-				free(charset);
-				for (i = 0; i < num_umaps; i++)
-					free((umap + i)->encoding);
-				free(umap);
-				return code;
-			}
-
-			/* Ensure we reuse the currently allocated umap */
-			num_umaps--;
+			free(charset);
+			for (i = 0; i < num_umaps; i++)
+				free((umap + i)->encoding);
+			free(umap);
+			return code;
 		} else {
 			/* If this mapping is identical to an existing one, 
 			 * then we can discard it */
@@ -937,7 +935,20 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 
 		code = rufl_init_scan_font_in_encoding(font_name, NULL,
 				charset, umap, &last_used);
-		if (code != rufl_OK) {
+		/* Not finding the font isn't fatal */
+		if (code == rufl_FONT_MANAGER_ERROR &&
+				(rufl_fm_error->errnum ==
+					error_FONT_NOT_FOUND ||
+				rufl_fm_error->errnum ==
+					error_FILE_NOT_FOUND ||
+				rufl_fm_error->errnum ==
+					error_FONT_ENCODING_NOT_FOUND ||
+				/* Neither is a too modern font */
+				rufl_fm_error->errnum ==
+					error_FONT_TOO_MANY_CHUNKS)) {
+			/* Ensure we reuse the currently allocated umap */
+			num_umaps--;
+		} else if (code != rufl_OK) {
 			LOG("rufl_init_scan_font_in_encoding(\"%s\", NULL, "
 			    "...): 0x%x (0x%x: %s)",
 					font_name, code,
@@ -946,25 +957,11 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 					code == rufl_FONT_MANAGER_ERROR ?
 						rufl_fm_error->errmess : "");
 
-			/* Not finding the font isn't fatal */
-			if (code != rufl_FONT_MANAGER_ERROR ||
-				(rufl_fm_error->errnum != 
-					error_FONT_NOT_FOUND &&
-				rufl_fm_error->errnum !=
-					error_FILE_NOT_FOUND &&
-				rufl_fm_error->errnum !=
-					error_FONT_ENCODING_NOT_FOUND &&
-				/* Neither is a too modern font */
-				rufl_fm_error->errnum !=
-					error_FONT_TOO_MANY_CHUNKS)) {
-				free(charset);
-				for (i = 0; i < num_umaps; i++)
-					free((umap + i)->encoding);
-				free(umap);
-				return code;
-			}
-
-			num_umaps--;
+			free(charset);
+			for (i = 0; i < num_umaps; i++)
+				free((umap + i)->encoding);
+			free(umap);
+			return code;
 		}
 	}
 
@@ -1023,8 +1020,7 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 
 	rufl_fm_error = xfont_find_font(buf, 160, 160, 0, 0, &font, 0, 0);
 	if (rufl_fm_error) {
-		LOG("xfont_find_font(\"%s\"): 0x%x: %s", buf,
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		/* Leave it to our caller to log, if they wish */
 		return rufl_FONT_MANAGER_ERROR;
 	}
 
