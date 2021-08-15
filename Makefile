@@ -9,7 +9,7 @@ PREFIX ?= /opt/netsurf
 NSSHARED ?= $(PREFIX)/share/netsurf-buildsystem
 include $(NSSHARED)/makefiles/Makefile.tools
 
-TESTRUNNER := $(ECHO)
+TESTRUNNER := $(PERL) $(NSTESTTOOLS)/testrunner.pl
 
 # Toolchain flags
 WARNFLAGS := -Wall -W -Wundef -Wpointer-arith -Wcast-align \
