@@ -1045,7 +1045,7 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 	 * a reset. As there are no "good" outcomes here, and we do
 	 * not have a time machine to go back and fix long-ago released
 	 * Font Managers, ensure we ignore UCS fonts here. */
-	if ((uint32_t) umap->encoding > 256) {
+	if ((uintptr_t) umap->encoding > 256) {
 		static os_error err = {
 			error_FONT_TOO_MANY_CHUNKS, "Rejecting UCS font"};
 		LOG("%s", "Rejecting UCS font");
@@ -1131,7 +1131,7 @@ static rufl_code rufl_init_umap_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	/* Stash the total number of encoding file entries so that
 	 * rufl_init_scan_font_in_encoding can detect the presence of a
 	 * UCS font on a non-UCS capable system. It will clean up for us. */
-	umap->encoding = (void *) (((uint32_t) umap->encoding) + 1);
+	umap->encoding = (void *) (((uintptr_t) umap->encoding) + 1);
 
 	return result;
 }
