@@ -14,7 +14,10 @@ TESTRUNNER := $(ECHO)
 # Toolchain flags
 WARNFLAGS := -Wall -W -Wundef -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes \
-	-Wmissing-declarations -Wnested-externs -pedantic
+	-Wmissing-declarations -Wnested-externs
+ifeq ($(HOST),arm-unknown-riscos)
+  WARNFLAGS := $(WARNFLAGS) -pedantic
+endif
 # BeOS/Haiku/AmigaOS4 standard library headers create warnings
 ifneq ($(BUILD),i586-pc-haiku)
   ifneq ($(findstring amigaos,$(BUILD)),amigaos)
@@ -35,6 +38,12 @@ ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)
     CFLAGS := $(CFLAGS) -I$(PREFIX)/include
     LDFLAGS := $(LDFLAGS) -lOSLib32
     TESTLDFLAGS := $(TESTLDFLAGS) -static
+  else
+    # Regardless of the host platform we're building for, we
+    # still need the RISC OS build environment because we need the
+    # OSLib headers.
+    # XXX: is there a way to avoid this path being hard-coded?
+    CFLAGS := $(CFLAGS) -I/opt/netsurf/arm-unknown-riscos/env/include
   endif
 endif
 
