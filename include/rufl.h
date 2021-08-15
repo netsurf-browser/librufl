@@ -185,7 +185,7 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
  * Dump the internal library state to stdout.
  */
 
-void rufl_dump_state(void);
+void rufl_dump_state(bool verbose);
 
 
 /**

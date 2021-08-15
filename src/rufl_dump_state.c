@@ -18,7 +18,7 @@ static void rufl_dump_unicode_map(struct rufl_unicode_map *umap);
  * Dump the internal library state to stdout.
  */
 
-void rufl_dump_state(void)
+void rufl_dump_state(bool verbose)
 {
 	unsigned int i, j;
 
@@ -32,7 +32,7 @@ void rufl_dump_state(void)
 		} else {
 			printf("    (no charset table)\n");
 		}
-		if (rufl_font_list[i].umap) {
+		if (verbose && rufl_font_list[i].umap) {
 			for (j = 0; j < rufl_font_list[i].num_umaps; j++) {
 				struct rufl_unicode_map *map =
 						rufl_font_list[i].umap + j;

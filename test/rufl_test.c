@@ -35,7 +35,7 @@ int main(void)
 	int bbox[4];
 
 	try(rufl_init(), "rufl_init");
-	rufl_dump_state();
+	rufl_dump_state(false);
 	try(rufl_paint("NewHall", rufl_WEIGHT_400, 240,
 			utf8_test, sizeof utf8_test - 1,
 			1200, 1000, 0), "rufl_paint");
