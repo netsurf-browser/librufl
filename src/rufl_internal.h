@@ -116,7 +116,7 @@ struct rufl_unicode_map {
 	/** Corresponding encoding name */
 	char *encoding;
 	/** Number of valid entries in map. */
-	unsigned int entries;
+	size_t entries;
 	/** Map from Unicode to character code. */
 	struct rufl_unicode_map_entry map[256];
 };
@@ -129,16 +129,16 @@ struct rufl_font_list_entry {
 	/** Character set of font. */
 	struct rufl_character_set *charset;
 	/** Number of Unicode mapping tables */
-	unsigned int num_umaps;
+	size_t num_umaps;
 	/** Mappings from Unicode to character code. */
 	struct rufl_unicode_map *umap;
 	/** Family that this font belongs to (index in rufl_family_list and
 	 * rufl_family_map). */
-	unsigned int family;
+	uint32_t family;
 	/** Font weight (0 to 8). */
-	unsigned int weight;
+	uint32_t weight;
 	/** Font slant (0 or 1). */
-	unsigned int slant;
+	uint32_t slant;
 };
 /** List of all available fonts. */
 extern struct rufl_font_list_entry *rufl_font_list;
@@ -151,7 +151,7 @@ struct rufl_family_map_entry {
 	/** This style does not exist in this family. */
 #	define NO_FONT UINT_MAX
 	/** Map from weight and slant to index in rufl_font_list, or NO_FONT. */
-	unsigned int font[9][2];
+	uint32_t font[9][2];
 };
 /** Map from font family to fonts, rufl_family_list_entries entries. */
 extern struct rufl_family_map_entry *rufl_family_map;
@@ -167,24 +167,24 @@ extern struct rufl_family_map_entry *rufl_family_map;
 /** An entry in rufl_cache. */
 struct rufl_cache_entry {
 	/** Font number (index in rufl_font_list), or rufl_CACHE_*. */
-	unsigned int font;
+	uint32_t font;
 	/** No font cached in this slot. */
 #define rufl_CACHE_NONE UINT_MAX
 	/** Font for rendering hex substitutions in this slot. */
 #define rufl_CACHE_CORPUS (UINT_MAX - 1)
 	/** Font size. */
-	unsigned int size;
+	uint32_t size;
 	/** Font encoding */
 	const char *encoding;
 	/** Value of rufl_cache_time when last used. */
-	unsigned int last_used;
+	uint32_t last_used;
 	/** RISC OS font handle. */
 	font_f f;
 };
 /** Cache of rufl_CACHE_SIZE most recently used font handles. */
 extern struct rufl_cache_entry rufl_cache[rufl_CACHE_SIZE];
 /** Counter for measuring age of cache entries. */
-extern int rufl_cache_time;
+extern uint32_t rufl_cache_time;
 
 /** Font manager does not support Unicode. */
 extern bool rufl_old_font_manager;
