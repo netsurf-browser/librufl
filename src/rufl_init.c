@@ -267,7 +267,9 @@ rufl_code rufl_init_font_list(void)
 	font_list_context context = 0;
 	char identifier[80], local_name[80];
 
-	while (context != -1) {
+	/* Permit up to 65535 font faces (we rely on 16bits of storage
+	 * being sufficient in the substitution tables. */
+	while (context != -1 && rufl_font_list_entries < UINT16_MAX) {
 		/* read identifier */
 		rufl_fm_error = xfont_list_fonts((byte *)identifier,
 				font_RETURN_FONT_NAME |
