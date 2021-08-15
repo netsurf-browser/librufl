@@ -67,7 +67,7 @@ static int *process_path(int *path, struct rufl_decomp_funcs *funcs,
 
 rufl_code rufl_decompose_glyph(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const char *string, size_t len,
+		const uint8_t *string, size_t len,
 		struct rufl_decomp_funcs *funcs, void *user)
 {
 	int *buf, *p, *ep;

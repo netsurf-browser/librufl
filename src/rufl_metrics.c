@@ -19,10 +19,10 @@ static int rufl_unicode_map_search_cmp(const void *keyval, const void *datum);
  * Read a font's metrics (sized for a 1pt font)
  */
 rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
-		os_box *bbox, int *xkern, int *ykern, int *italic,
-		int *ascent, int *descent,
-		int *xheight, int *cap_height,
-		signed char *uline_position, unsigned char *uline_thickness)
+		os_box *bbox, int32_t *xkern, int32_t *ykern, int32_t *italic,
+		int32_t *ascent, int32_t *descent,
+		int32_t *xheight, int32_t *cap_height,
+		int8_t *uline_position, uint8_t *uline_thickness)
 {
 	unsigned int font;
 	font_f f;
@@ -114,10 +114,10 @@ rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
  */
 rufl_code rufl_glyph_metrics(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const char *string, size_t length,
-		int *x_bearing, int *y_bearing,
-		int *width, int *height,
-		int *x_advance, int *y_advance)
+		const uint8_t *string, size_t length,
+		int32_t *x_bearing, int32_t *y_bearing,
+		int32_t *width, int32_t *height,
+		int32_t *x_advance, int32_t *y_advance)
 {
 	const char *font_encoding = NULL;
 	unsigned int font, font1, u;

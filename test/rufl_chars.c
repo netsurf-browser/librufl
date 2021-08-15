@@ -262,7 +262,7 @@ int main(void)
 
 rufl_code redraw(int x, int y, int y0, int y1)
 {
-	char s[10];
+	uint8_t s[10];
 	unsigned int l;
 	unsigned int u;
 	rufl_code code;

@@ -27,7 +27,7 @@ static const os_trfm trfm_oblique =
 static rufl_code rufl_process(rufl_action action,
 		const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string0, size_t length,
+		const uint8_t *string0, size_t length,
 		int x, int y, unsigned int flags,
 		int *width, int click_x, size_t *char_offset, int *actual_x,
 		rufl_callback_t callback, void *context);
@@ -58,7 +58,7 @@ static rufl_code rufl_process_not_available(rufl_action action,
 
 rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int x, int y, unsigned int flags)
 {
 	return rufl_process(rufl_PAINT,
@@ -73,7 +73,7 @@ rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_width(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int *width)
 {
 	return rufl_process(rufl_WIDTH,
@@ -89,7 +89,7 @@ rufl_code rufl_width(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int click_x,
 		size_t *char_offset, int *actual_x)
 {
@@ -106,7 +106,7 @@ rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_split(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int width,
 		size_t *char_offset, int *actual_x)
 {
@@ -123,7 +123,7 @@ rufl_code rufl_split(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int x, int y,
 		rufl_callback_t callback, void *context)
 {
@@ -139,11 +139,11 @@ rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		int *bbox)
+		os_box *bbox)
 {
 	return rufl_process(rufl_FONT_BBOX,
 			font_family, font_style, font_size, 0,
-			0, 0, 0, 0, bbox, 0, 0, 0, 0, 0);
+			0, 0, 0, 0, (int *) bbox, 0, 0, 0, 0, 0);
 }
 
 
@@ -154,7 +154,7 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 rufl_code rufl_process(rufl_action action,
 		const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string0, size_t length,
+		const uint8_t *string0, size_t length,
 		int x, int y, unsigned int flags,
 		int *width, int click_x, size_t *char_offset, int *actual_x,
 		rufl_callback_t callback, void *context)
@@ -168,7 +168,7 @@ rufl_code rufl_process(rufl_action action,
 	size_t offset_u;
 	size_t offset_map[rufl_PROCESS_CHUNK];
 	unsigned int slant;
-	const char *string = string0;
+	const uint8_t *string = string0;
 	struct rufl_character_set *charset;
 	rufl_code code;
 
@@ -310,7 +310,9 @@ rufl_code rufl_process_span(rufl_action action,
 		return code;
 
 	if (action == rufl_FONT_BBOX) {
-		rufl_fm_error = xfont_read_info(f, &x[0], &x[1], &x[2], &x[3]);
+		os_box *bbox = (os_box *) x;
+		rufl_fm_error = xfont_read_info(f, &bbox->x0, &bbox->y0,
+				&bbox->x1, &bbox->y1);
 		if (rufl_fm_error)
 			return rufl_FONT_MANAGER_ERROR;
 		return rufl_OK;
@@ -385,7 +387,7 @@ rufl_code rufl_process_span_old(rufl_action action,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context)
 {
-	char s2[rufl_PROCESS_CHUNK];
+	uint8_t s2[rufl_PROCESS_CHUNK];
 	char *split_point;
 	int x_out, y_out;
 	unsigned int i;
@@ -394,12 +396,15 @@ rufl_code rufl_process_span_old(rufl_action action,
 	rufl_code code;
 
 	if (action == rufl_FONT_BBOX) {
+		os_box *bbox = (os_box *) x;
+
 		/* Don't need encoding for bounding box */
 		code = rufl_find_font(font, font_size, NULL, &f);
 		if (code != rufl_OK)
 			return code;
 
-		rufl_fm_error = xfont_read_info(f, &x[0], &x[1], &x[2], &x[3]);
+		rufl_fm_error = xfont_read_info(f, &bbox->x0, &bbox->y0,
+				&bbox->x1, &bbox->y1);
 		if (rufl_fm_error) {
 			LOG("xfont_read_info: 0x%x: %s",
 					rufl_fm_error->errnum,
@@ -462,7 +467,8 @@ rufl_code rufl_process_span_old(rufl_action action,
 				return rufl_FONT_MANAGER_ERROR;
 			}
 
-			rufl_fm_error = xfont_paint(f, s2, font_OS_UNITS |
+			rufl_fm_error = xfont_paint(f, (char *) s2,
+					font_OS_UNITS |
 					(oblique ? font_GIVEN_TRFM : 0) |
 					font_GIVEN_LENGTH | font_GIVEN_FONT |
 					font_KERN |
@@ -492,7 +498,7 @@ rufl_code rufl_process_span_old(rufl_action action,
 
 		/* increment x by width of span */
 		if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
-			rufl_fm_error = xfont_scan_string(f, s2,
+			rufl_fm_error = xfont_scan_string(f, (char *) s2,
 					font_GIVEN_LENGTH | font_GIVEN_FONT |
 					font_KERN |
 					((action == rufl_X_TO_OFFSET) ?
@@ -500,9 +506,9 @@ rufl_code rufl_process_span_old(rufl_action action,
 					(click_x - *x) * 400, 0x7fffffff, 
 					0, 0, i,
 					&split_point, &x_out, &y_out, 0);
-			*offset += split_point - s2;
+			*offset += split_point - (char *) s2;
 		} else {
-			rufl_fm_error = xfont_scan_string(f, s2,
+			rufl_fm_error = xfont_scan_string(f, (char *) s2,
 					font_GIVEN_LENGTH | font_GIVEN_FONT | 
 					font_KERN,
 					0x7fffffff, 0x7fffffff, 0, 0, i,
@@ -548,7 +554,7 @@ rufl_code rufl_process_not_available(rufl_action action,
 		int click_x, size_t *offset,
 		rufl_callback_t callback, void *context)
 {
-	char missing[] = "000000";
+	uint8_t missing[] = "000000";
 	const int dx = 7 * font_size / 64;
 	const int dx3 = 10.5 * font_size / 64;
 	int top_y = y + 5 * font_size / 64;
@@ -589,7 +595,8 @@ rufl_code rufl_process_not_available(rufl_action action,
 
 		/* first two characters in top row */
 		if (action == rufl_PAINT) {
-			rufl_fm_error = xfont_paint(f, missing + offset,
+			rufl_fm_error = xfont_paint(f,
+					(char *) (missing + offset),
 					font_OS_UNITS | font_GIVEN_LENGTH |
 					font_GIVEN_FONT | font_KERN |
 					((flags & rufl_BLEND_FONT) ?
@@ -605,7 +612,8 @@ rufl_code rufl_process_not_available(rufl_action action,
 
 		/* last two characters underneath */
 		if (action == rufl_PAINT) {
-			rufl_fm_error = xfont_paint(f, missing + offset + step,
+			rufl_fm_error = xfont_paint(f,
+					(char *) (missing + offset + step),
 					font_OS_UNITS |
 					font_GIVEN_LENGTH | font_GIVEN_FONT |
 					font_KERN |

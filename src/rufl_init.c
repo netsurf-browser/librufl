@@ -29,7 +29,7 @@
 struct rufl_font_list_entry *rufl_font_list = 0;
 size_t rufl_font_list_entries = 0;
 const char **rufl_family_list = 0;
-unsigned int rufl_family_list_entries = 0;
+size_t rufl_family_list_entries = 0;
 struct rufl_family_map_entry *rufl_family_map = 0;
 os_error *rufl_fm_error = 0;
 void *rufl_family_menu = 0;
@@ -180,7 +180,7 @@ rufl_code rufl_init(void)
 		xhourglass_off();
 		return code;
 	}
-	LOG("%zu faces, %u families", rufl_font_list_entries,
+	LOG("%zu faces, %zu families", rufl_font_list_entries,
 			rufl_family_list_entries);
 
 	code = rufl_load_cache();

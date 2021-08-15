@@ -8,6 +8,7 @@
 #ifndef RUFL_H
 #define RUFL_H
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include "oslib/os.h"
@@ -53,7 +54,7 @@ extern os_error *rufl_fm_error;
 /** List of available font families. */
 extern const char **rufl_family_list;
 /** Number of entries in rufl_family_list. */
-extern unsigned int rufl_family_list_entries;
+extern size_t rufl_family_list_entries;
 
 /** Menu of font families. */
 extern void *rufl_family_menu;
@@ -85,7 +86,7 @@ rufl_code rufl_init(void);
 
 rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int x, int y, unsigned int flags);
 
 
@@ -95,7 +96,7 @@ rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_width(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int *width);
 
 
@@ -105,7 +106,7 @@ rufl_code rufl_width(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int click_x,
 		size_t *char_offset, int *actual_x);
 
@@ -116,7 +117,7 @@ rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_split(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int width,
 		size_t *char_offset, int *actual_x);
 
@@ -124,7 +125,7 @@ rufl_code rufl_split(const char *font_family, rufl_style font_style,
 /** Type of callback function for rufl_paint_callback(). */
 typedef void (*rufl_callback_t)(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned int *s32, unsigned int n,
+		const uint8_t *s8, const uint32_t *s32, unsigned int n,
 		int x, int y);
 
 
@@ -134,7 +135,7 @@ typedef void (*rufl_callback_t)(void *context,
 
 rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		int x, int y,
 		rufl_callback_t callback, void *context);
 
@@ -145,7 +146,7 @@ rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_decompose_glyph(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const char *string, size_t length,
+		const uint8_t *string, size_t length,
 		struct rufl_decomp_funcs *funcs, void *user);
 
 
@@ -154,10 +155,10 @@ rufl_code rufl_decompose_glyph(const char *font_family,
  */
 
 rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
-		os_box *bbox, int *xkern, int *ykern, int *italic,
-		int *ascent, int *descent,
-		int *xheight, int *cap_height,
-		signed char *uline_position, unsigned char *uline_thickness);
+		os_box *bbox, int32_t *xkern, int32_t *ykern, int32_t *italic,
+		int32_t *ascent, int32_t *descent,
+		int32_t *xheight, int32_t *cap_height,
+		int8_t *uline_position, uint8_t *uline_thickness);
 
 
 /**
@@ -166,10 +167,10 @@ rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_glyph_metrics(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const char *string, size_t length,
-		int *x_bearing, int *y_bearing,
-		int *width, int *height,
-		int *x_advance, int *y_advance);
+		const uint8_t *string, size_t length,
+		int32_t *x_bearing, int32_t *y_bearing,
+		int32_t *width, int32_t *height,
+		int32_t *x_advance, int32_t *y_advance);
 
 
 /**
@@ -177,8 +178,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
  */
 
 rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
-		unsigned int font_size,
-		int *bbox);
+		unsigned int font_size, os_box *bbox);
 
 
 /**

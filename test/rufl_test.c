@@ -18,13 +18,13 @@ static int cubic_to(os_coord *control1, os_coord *control2, os_coord *to,
 		void *user);
 static void callback(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned int *s32, unsigned int n,
+		const uint8_t *s8, const uint32_t *s32, unsigned int n,
 		int x, int y);
 
 
 int main(void)
 {
-	char utf8_test[] = "Hello,	world! ὕαλον "
+	const uint8_t utf8_test[] = "Hello,	world! ὕαλον "
 			"Uherské Hradiště. 𐀀"
 			"\xf0\xa0\x80\xa1";
 	int width;
@@ -32,7 +32,7 @@ int main(void)
 	int x;
 	int actual_x;
 	struct rufl_decomp_funcs funcs = { move_to, line_to, cubic_to };
-	int bbox[4];
+	os_box bbox;
 
 	try(rufl_init(), "rufl_init");
 	rufl_dump_state(false);
@@ -58,14 +58,14 @@ int main(void)
 				char_offset, utf8_test + char_offset);
 	}
 	try(rufl_decompose_glyph("Homerton", rufl_WEIGHT_400, 1280,
-				"A", 1, &funcs, 0),
+				(const uint8_t *) "A", 1, &funcs, 0),
 				"rufl_decompose_glyph");
 	try(rufl_paint_callback("NewHall", rufl_WEIGHT_400, 240,
 			utf8_test, sizeof utf8_test - 1,
 			1200, 1000, callback, 0), "rufl_paint_callback");
-	try(rufl_font_bbox("NewHall", rufl_WEIGHT_400, 240, bbox),
+	try(rufl_font_bbox("NewHall", rufl_WEIGHT_400, 240, &bbox),
 			"rufl_font_bbox");
-	printf("bbox: %i %i %i %i\n", bbox[0], bbox[1], bbox[2], bbox[3]);
+	printf("bbox: %i %i %i %i\n", bbox.x0, bbox.y0, bbox.x1, bbox.y1);
 	rufl_quit();
 
 	return 0;
@@ -132,7 +132,7 @@ int cubic_to(os_coord *control1, os_coord *control2, os_coord *to,
 
 void callback(void *context,
 		const char *font_name, unsigned int font_size,
-		const char *s8, unsigned int *s32, unsigned int n,
+		const uint8_t *s8, const uint32_t *s32, unsigned int n,
 		int x, int y)
 {
 	(void) context;
@@ -141,7 +141,7 @@ void callback(void *context,
 	if (s8)
 		printf("s8 \"%.*s\" ", n, s8);
 	else {
-		printf("s16 \"");
+		printf("s32 \"");
 		for (unsigned int i = 0; i != n; i++)
 			printf("%x ", (unsigned int) s32[i]);
 		printf("\" ");
