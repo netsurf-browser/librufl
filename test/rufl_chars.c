@@ -302,7 +302,7 @@ rufl_code redraw(int x, int y, int y0, int y1)
 
 void try(rufl_code code, const char *context)
 {
-	char s[200];
+	char s[400];
 	if (code == rufl_OK)
 		return;
 	else if (code == rufl_OUT_OF_MEMORY)
