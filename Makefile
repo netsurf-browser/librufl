@@ -34,6 +34,7 @@ ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)
   ifeq ($(HOST),arm-unknown-riscos)
     CFLAGS := $(CFLAGS) -I$(PREFIX)/include
     LDFLAGS := $(LDFLAGS) -lOSLib32
+    TESTLDFLAGS := $(TESTLDFLAGS) -static
   endif
 endif
 
