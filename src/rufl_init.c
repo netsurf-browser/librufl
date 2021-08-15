@@ -1028,9 +1028,32 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 	if (code != rufl_OK) {
 		LOG("rufl_init_read_encoding(\"%s\", ...): 0x%x",
 				buf, code);
+		umap->encoding = NULL;
 		xfont_lose_font(font);
 		return code;
 	}
+
+	/* Detect attempts to use UCS fonts with a non-UCS Font Manager.
+	 * There is a bug in all known non-UCS Font Managers which is
+	 * often triggered by scanning many fonts. The Font Manager will
+	 * attempt to dereference a bogus pointer (at the start of
+	 * getbbox_unscaled) and thus cause an abort in SVC mode.
+	 * Fallout can be as (relatively) benign as the application
+	 * crashing or escalate to an entire system freeze requiring
+	 * a reset. As there are no "good" outcomes here, and we do
+	 * not have a time machine to go back and fix long-ago released
+	 * Font Managers, ensure we ignore UCS fonts here. */
+	if ((uint32_t) umap->encoding > 256) {
+		static os_error err = {
+			error_FONT_TOO_MANY_CHUNKS, "Rejecting UCS font"};
+		LOG("%s", "Rejecting UCS font");
+		umap->encoding = NULL;
+		xfont_lose_font(font);
+		rufl_fm_error = &err;
+		return rufl_FONT_MANAGER_ERROR;
+	}
+	/* Eliminate all trace of our (ab)use of the encoding field */
+	umap->encoding = NULL;
 
 	for (i = 0; i != umap->entries; i++) {
 		u = umap->map[i].u;
@@ -1102,9 +1125,11 @@ static rufl_code rufl_init_umap_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 		umap->map[umap->entries].u = ucs4;
 		umap->map[umap->entries].c = glyph_idx;
 		umap->entries++;
-		if (umap->entries == 256)
-			result = rufl_IO_EOF;
 	}
+	/* Stash the total number of encoding file entries so that
+	 * rufl_init_scan_font_in_encoding can detect the presence of a
+	 * UCS font on a non-UCS capable system. It will clean up for us. */
+	umap->encoding = (void *) (((uint32_t) umap->encoding) + 1);
 
 	return result;
 }
