@@ -546,7 +546,8 @@ static rufl_code chd(uint64_t *table, size_t table_entries,
 	if (!entries_per_bucket)
 		return rufl_OUT_OF_MEMORY;
 
-	bitmap = calloc(range >> 3, 1);
+	/* Round up bitmap size to the next byte boundary */
+	bitmap = calloc(((range + 7) & ~7) >> 3, 1);
 	if (!bitmap) {
 		free(entries_per_bucket);
 		return rufl_OUT_OF_MEMORY;
