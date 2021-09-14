@@ -1864,10 +1864,10 @@ rufl_code rufl_init_family_menu(void)
 	wimp_menu *menu;
 	unsigned int i;
 
-	menu = malloc(wimp_SIZEOF_MENU(rufl_family_list_entries));
+	menu = malloc(wimp_SIZEOF_MENU(rufl_family_list_entries + 1));
 	if (!menu)
 		return rufl_OUT_OF_MEMORY;
-	menu->title_data.indirected_text.text = (char *) "Fonts";
+	strcpy(menu->title_data.text, "Fonts");
 	menu->title_fg = wimp_COLOUR_BLACK;
 	menu->title_bg = wimp_COLOUR_LIGHT_GREY;
 	menu->work_fg = wimp_COLOUR_BLACK;
@@ -1888,8 +1888,18 @@ rufl_code rufl_init_family_menu(void)
 		menu->entries[i].data.indirected_text.size =
 				strlen(rufl_family_list[i]);
 	}
-	menu->entries[0].menu_flags = wimp_MENU_TITLE_INDIRECTED;
-	menu->entries[i - 1].menu_flags |= wimp_MENU_LAST;
+	if (i == 0) {
+		menu->entries[i].menu_flags = wimp_MENU_LAST;
+		menu->entries[i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[i].icon_flags = wimp_ICON_TEXT |
+			wimp_ICON_SHADED |
+			(wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
+			(wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
+		menu->entries[i].data.text[0] = '\0';
+
+	} else {
+		menu->entries[i - 1].menu_flags |= wimp_MENU_LAST;
+	}
 
 	rufl_family_menu = menu;
 
