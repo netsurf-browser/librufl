@@ -1,3 +1,6 @@
+#include <assert.h>
+#include <string.h>
+
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
@@ -6,56 +9,174 @@
 #include <oslib/wimp.h>
 #include <oslib/wimpreadsysinfo.h>
 
+#include "harness-priv.h"
+
+static os_error font_no_font = { error_FONT_NO_FONT, "Undefined font handle" };
+static os_error font_bad_font_number = {
+	error_FONT_BAD_FONT_NUMBER,
+	"Font handle out of range"
+};
+static os_error font_not_found = { error_FONT_NOT_FOUND, "Font not found" };
+static os_error font_encoding_not_found = {
+	error_FONT_ENCODING_NOT_FOUND,
+	"Encoding not found"
+};
+static os_error font_no_handles = {
+	error_FONT_NO_HANDLES,
+	"No more font handles"
+};
+static os_error font_reserved = {
+	error_FONT_RESERVED,
+	"Reserved fields must be zero"
+};
+static os_error buff_overflow = { error_BUFF_OVERFLOW, "Buffer overflow" };
+static os_error bad_parameters = { error_BAD_PARAMETERS, "Bad parameters" };
+static os_error no_such_swi = { error_NO_SUCH_SWI, "SWI not known" };
 static os_error unimplemented = { error_UNIMPLEMENTED, "Not implemented" };
 
 /****************************************************************************/
 
 os_error *xfont_cache_addr (int *version, int *cache_size, int *cache_used)
 {
-	(void) version;
-	(void) cache_size;
-	(void) cache_used;
+	if (version != NULL)
+		*version = h->fm_version;
+	if (cache_size != NULL)
+		*cache_size = 512 * 1024;
+	if (cache_used != NULL)
+		*cache_used = 0;
 
-	return &unimplemented;
+	return NULL;
 }
 
 os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 		int xres, int yres, font_f *font, int *xres_out, int *yres_out)
 {
-	(void) font_name;
-	(void) xsize;
-	(void) ysize;
-	(void) xres;
-	(void) yres;
-	(void) font;
-	(void) xres_out;
-	(void) yres_out;
+	char name[80], encoding[80];
+	const char *slash;
+	size_t ni, ei;
+	int fh;
 
-	return &unimplemented;
+	/* Default xres and yres */
+	if (xres <= 0)
+		xres = 90;
+	if (yres <= 0)
+		yres = 90;
+
+	/* Parse font name */
+	slash = strchr(font_name, '\\');
+	if (slash == NULL) {
+		/* Bare name: assume Latin1 encoding */
+		strncpy(name, font_name, sizeof(name));
+		name[sizeof(name)-1] = '\0';
+		strcpy(encoding, "Latin1");
+	} else {
+		/* Identifier: extract encoding */
+		strncpy(name, font_name, slash - font_name);
+		name[slash-font_name] = '\0';
+		assert(slash[1] == 'E');
+		strncpy(encoding, slash + 2, sizeof(encoding));
+		encoding[sizeof(encoding)-1] = '\0';
+	}
+
+	/* Determine if we know about this font name */
+	for (ni = 0; ni < h->n_font_names; ni++) {
+		if (strcmp(h->font_names[ni], name) == 0)
+			break;
+	}
+	if (ni == h->n_font_names) {
+		return &font_not_found;
+	}
+
+	/* Determine if we know about this encoding */
+	for (ei = 0; ei < h->n_encodings; ei++) {
+		if (strcmp(h->encodings[ei], encoding) == 0)
+			break;
+	}
+	if (ei == h->n_encodings) {
+		return &font_encoding_not_found;
+	}
+
+	/* Find existing font handle (0 is forbidden) */
+	for (fh = 1; fh < 256; fh++) {
+		if (h->fonts[fh].refcnt > 0 && h->fonts[fh].name == ni &&
+				h->fonts[fh].encoding == ei &&
+				h->fonts[fh].xsize == xsize &&
+				h->fonts[fh].ysize == ysize &&
+				h->fonts[fh].xres == xres &&
+				h->fonts[fh].yres == yres)
+			break;
+	}
+	if (fh == 256) {
+		/* No existing font found: allocate new one */
+		for (fh = 1; fh < 256; fh++) {
+			if (h->fonts[fh].refcnt == 0)
+				break;
+		}
+		if (fh == 256) {
+			return &font_no_handles;
+		}
+
+		h->fonts[fh].name = ni;
+		h->fonts[fh].encoding = ei;
+		h->fonts[fh].xsize = xsize;
+		h->fonts[fh].ysize = ysize;
+		h->fonts[fh].xres = xres;
+		h->fonts[fh].yres = yres;
+	}
+
+	/* Bump refcnt */
+	h->fonts[fh].refcnt++;
+
+	/* Set current font */
+	h->current_font = fh;
+
+	if (font != NULL)
+		*font = (font_f) fh;
+	if (xres_out != NULL)
+		*xres_out = xres;
+	if (yres_out != NULL)
+		*yres_out = yres;
+
+	return NULL;
 }
 
 os_error *xfont_lose_font (font_f font)
 {
-	(void) font;
+	if (font != 0 && h->fonts[font].refcnt > 0)
+		h->fonts[font].refcnt--;
 
-	return &unimplemented;
+	return NULL;
 }
 
 os_error *xfont_read_info (font_f font, int *x0, int *y0, int *x1, int *y1)
 {
-	(void) font;
-	(void) x0;
-	(void) y0;
-	(void) x1;
-	(void) y1;
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
 
-	return &unimplemented;
+	/* Cheat: just scale point size to OS units */
+	if (x0 != NULL)
+		*x0 = 0;
+	if (y0 != NULL)
+		*y0 = 0;
+	if (x1 != NULL)
+		*x1 = ((h->fonts[font].xsize >> 4) * 72) / 180;
+	if (y1 != NULL)
+		*y1 = ((h->fonts[font].ysize >> 4) * 72) / 180;
+
+	return NULL;
 }
 
 os_error *xfont_read_encoding_filename (font_f font, char *buffer, int size,
 		char **end)
 {
-	(void) font;
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
+
+	//XXX:
 	(void) buffer;
 	(void) size;
 	(void) end;
@@ -67,33 +188,90 @@ os_error *xfont_list_fonts (byte *buffer1, font_list_context context,
 		int size1, byte *buffer2, int size2, char const *tick_font,
 		font_list_context *context_out, int *used1, int *used2)
 {
-	(void) buffer1;
-	(void) context;
-	(void) size1;
-	(void) buffer2;
-	(void) size2;
-	(void) tick_font;
-	(void) context_out;
-	(void) used1;
-	(void) used2;
+	const char **values;
+	size_t n_values;
+	size_t index = (context & 0xffff);
 
-	return &unimplemented;
+	if ((context & font_RETURN_FONT_MENU) &&
+			(context & ~(font_USE_LINEFEED |
+				     font_RETURN_FONT_MENU |
+				     font_ALLOW_SYSTEM_FONT |
+				     font_GIVEN_TICK | 0x400000)) >> 16)
+		return &bad_parameters;
+	if (!(context & font_RETURN_FONT_MENU) &&
+			(context & ~(font_RETURN_FONT_NAME |
+				     font_RETURN_LOCAL_FONT_NAME |
+				     font_USE_LINEFEED | 0x400000)) >> 16)
+		return &bad_parameters;
+	if (context & font_RETURN_FONT_MENU)
+		return &unimplemented;
+
+	if (context & 0x400000) {
+		values = h->encodings;
+		n_values = h->n_encodings;
+	} else {
+		values = h->font_names;
+		n_values = h->n_font_names;
+	}
+
+	if (index < n_values) {
+		int len = (int) strlen(values[index]) + 1;
+		if (context & font_RETURN_FONT_NAME) {
+			if (buffer1 != NULL && size1 < len)
+				return &buff_overflow;
+			if (buffer1 != NULL)
+				strcpy((char *) buffer1, values[index]);
+			if (used1 != NULL)
+				*used1 = len;
+		}
+		if (context & font_RETURN_LOCAL_FONT_NAME) {
+			if (buffer2 != NULL && size2 < len)
+				return &buff_overflow;
+			if (buffer2 != NULL)
+				strcpy((char *) buffer2, values[index]);
+			if (used2 != NULL)
+				*used2 = len;
+		}
+		index++;
+	} else {
+		index = -1;
+	}
+
+	if (context_out != NULL)
+		*context_out = (font_list_context) index;
+
+	(void) tick_font;
+
+	return NULL;
 }
 
 os_error *xfont_set_font (font_f font)
 {
-	(void) font;
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
 
-	return &unimplemented;
+	h->current_font = font;
+
+	return NULL;
 }
 
 os_error *xfont_paint (font_f font, char const *string,
 		font_string_flags flags, int xpos, int ypos,
 		font_paint_block const *block, os_trfm const *trfm, int length)
 {
-	(void) font;
+	if (!(flags & font_GIVEN_FONT) || font == 0)
+		font = h->current_font;
+	if (font == 0 || h->fonts[font].refcnt == 0)
+		return &font_no_font;
+
+	if (flags & font_GIVEN_FONT)
+		h->current_font = font;
+
+	//XXX:
+	//XXX: also, pay attention to redirection to buffer
 	(void) string;
-	(void) flags;
 	(void) xpos;
 	(void) ypos;
 	(void) block;
@@ -108,9 +286,13 @@ os_error *xfont_scan_string (font_f font, char const *s,
 		os_trfm const *trfm, int length, char **split_point,
 		int *x_out, int *y_out, int *num_split_chars)
 {
-	(void) font;
+	if (!(flags & font_GIVEN_FONT) || font == 0)
+		font = h->current_font;
+	if (font == 0 || h->fonts[font].refcnt == 0)
+		return &font_no_font;
+
+	//XXX:
 	(void) s;
-	(void) flags;
 	(void) x;
 	(void) y;
 	(void) block;
@@ -127,22 +309,57 @@ os_error *xfont_scan_string (font_f font, char const *s,
 os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 		byte *buffer, char **end)
 {
-	(void) flags;
-	(void) buffer;
-	(void) end;
+	if ((intptr_t) buffer <= 0 && flags != 0)
+		return &font_reserved;
+	if (flags & ~(font_NO_OUTPUT | font_ADD_HINTS | font_ERROR_IF_BITMAP))
+		return &font_reserved;
 
-	return &unimplemented;
+	if (end)
+		*end = h->buffer;
+
+	if ((intptr_t) buffer != -1) {
+		h->buffer = (char *) buffer;
+		h->buffer_flags = flags;
+	}
+
+	return NULL;
 }
 
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	(void) font;
-	(void) character;
-	(void) next_character;
-	(void) internal_character_code;
+	static int extchars[] = {     0x20, 0x21, 0x30, 0x31, 0x40, -1 };
+	static int intchars[] = { -1,    1,    2,   -1,    3,    4 };
+	int index;
 
-	return &unimplemented;
+	if (!h->fm_ucs)
+		return &no_such_swi;
+
+	if (font == 0)
+		font = h->current_font;
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
+
+	/* First character */
+	if (character == 0) {
+		character = extchars[0];
+		if (h->fm_broken_fec)
+			character = extchars[2];
+	}
+
+	for (index = 0; index < 6; index++) {
+		if (extchars[index] == character)
+			break;
+	}
+
+	if (next_character != NULL)
+		*next_character = extchars[index];
+	if (internal_character_code != NULL)
+		*internal_character_code = intchars[index];
+
+	return NULL;
 }
 
 /****************************************************************************/
