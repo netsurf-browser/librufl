@@ -286,24 +286,74 @@ os_error *xfont_scan_string (font_f font, char const *s,
 		os_trfm const *trfm, int length, char **split_point,
 		int *x_out, int *y_out, int *num_split_chars)
 {
+	size_t advance = 1;
+	int width = 0;
+
 	if (!(flags & font_GIVEN_FONT) || font == 0)
 		font = h->current_font;
 	if (font == 0 || h->fonts[font].refcnt == 0)
 		return &font_no_font;
 
-	//XXX:
-	(void) s;
-	(void) x;
+	if ((flags & font_GIVEN_BLOCK) && block == NULL)
+		return &bad_parameters;
+	if ((flags & font_RETURN_BBOX) && !(flags & font_GIVEN_BLOCK))
+		return &bad_parameters;
+	if ((flags & font_GIVEN_BLOCK) && (block->space.x != 0 ||
+			block->space.y != 0 ||
+			block->letter.x != 0 ||
+			block->letter.y != 0 ||
+			block->split_char != -1))
+		return &unimplemented;
+
+	if ((flags & font_GIVEN32_BIT) && (flags & font_GIVEN16_BIT))
+		return &bad_parameters;
+
+	if (!(flags & font_GIVEN_LENGTH))
+		length = 0x7ffffffc;
+
+	if (flags & font_GIVEN32_BIT)
+		advance = 4;
+	else if (flags & font_GIVEN16_BIT)
+		advance = 2;
+
+	/* Consume up to length bytes of input */
+	while (length > 0) {
+		uint32_t c = 0, i;
+		for (i = 0; i < advance; i++) {
+			c |= s[i] << (advance - i - 1);
+		}
+		s += advance;
+		length -= advance;
+
+		/* Regardless of length, stop on terminator */
+		if (c == 0 || c == 10 || c == 13)
+			break;
+
+		/* Just scale font size to millipoints and add on the width */
+		width += ((h->fonts[font].xsize * 1000) >> 4);
+		//XXX: how is negative x meant to work?
+		if (x > 0 && width > x)
+			break;
+	}
+
+	if (flags & font_RETURN_BBOX) {
+		block->bbox.x0 = 0;
+		block->bbox.y0 = 0;
+		block->bbox.x1 = width;
+		block->bbox.y1 = (h->fonts[font].ysize * 1000) >> 4;
+	}
+
+	if (x_out != NULL)
+		*x_out = width;
+	if (y_out != NULL)
+		*y_out = (h->fonts[font].ysize * 1000) >> 4;
+
 	(void) y;
-	(void) block;
 	(void) trfm;
-	(void) length;
 	(void) split_point;
-	(void) x_out;
-	(void) y_out;
 	(void) num_split_chars;
 
-	return &unimplemented;
+	return NULL;
 }
 
 os_error *xfont_switch_output_to_buffer (font_output_flags flags,
@@ -344,14 +394,15 @@ os_error *xfont_enumerate_characters (font_f font, int character,
 
 	/* First character */
 	if (character == 0) {
-		character = extchars[0];
+		index = 0;
 		if (h->fm_broken_fec)
-			character = extchars[2];
-	}
-
-	for (index = 0; index < 6; index++) {
-		if (extchars[index] == character)
-			break;
+			index = 2;
+	} else {
+		for (index = 0; index < 6; index++) {
+			if (extchars[index] == character)
+				break;
+		}
+		index++;
 	}
 
 	if (next_character != NULL)
@@ -426,14 +477,27 @@ os_error *xos_read_mode_variable (os_mode mode, os_mode_var var, int *var_val,
 os_error *xosfscontrol_canonicalise_path (char const *path_name, char *buffer,
 		char const *var, char const *path, int size, int *spare)
 {
-	(void) path_name;
-	(void) buffer;
-	(void) var;
-	(void) path;
-	(void) size;
-	(void) spare;
+	const char *prefix = "Resources:$.Fonts.";
+	size_t len = strlen(path_name) + strlen(prefix) + 1;
 
-	return &unimplemented;
+	if (strcmp(var, "Font$Path") != 0 || path != NULL)
+		return &unimplemented;
+
+	if (buffer == NULL && size != 0)
+		return &bad_parameters;
+
+	if (buffer != NULL && size < (int) len)
+		return &buff_overflow;
+
+	if (buffer != NULL) {
+		strcpy(buffer, prefix);
+		strcpy(buffer + strlen(prefix), path_name);
+	}
+
+	if (spare != NULL)
+		*spare = size - len;
+
+	return NULL;
 }
 
 /****************************************************************************/
