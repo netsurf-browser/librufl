@@ -3,3 +3,4 @@
 # Test		Description				DataDir
 nofonts		Ensure a lack of fonts "works"
 ucsinit		Ensure that UCS FM initialisation works
+olducsinit	Ensure that UCS FM (pre 3.64) initialisation works

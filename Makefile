@@ -31,6 +31,7 @@ else
   # __inline__ is a GCCism
   CFLAGS := $(CFLAGS) -Dinline="__inline__"
 endif
+CFLAGS := $(CFLAGS) -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=500
 
 # OSLib
 ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)

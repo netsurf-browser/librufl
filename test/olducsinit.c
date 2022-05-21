@@ -7,7 +7,7 @@
 #include "harness.h"
 #include "testutils.h"
 
-static char template[] = "/tmp/ucsinitXXXXXX";
+static char template[] = "/tmp/olducsinitXXXXXX";
 static const char *ptmp = NULL;
 
 static int ftw_cb(const char *path, const struct stat *sb,
@@ -47,7 +47,7 @@ int main(int argc, const char **argv)
 	atexit(cleanup);
 	chdir(ptmp);
 
-	rufl_test_harness_init(380, true, true);
+	rufl_test_harness_init(361, true, true);
 
 	assert(rufl_OK == rufl_init());
 	assert(NULL == rufl_fm_error);
