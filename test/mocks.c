@@ -161,9 +161,53 @@ os_error *xfont_read_info (font_f font, int *x0, int *y0, int *x1, int *y1)
 	if (y0 != NULL)
 		*y0 = 0;
 	if (x1 != NULL)
-		*x1 = ((h->fonts[font].xsize >> 4) * 72) / 180;
+		*x1 = (h->fonts[font].xsize * 180) / (72 * 16);
 	if (y1 != NULL)
-		*y1 = ((h->fonts[font].ysize >> 4) * 72) / 180;
+		*y1 = (h->fonts[font].ysize * 180) / (72 * 16);
+
+	return NULL;
+}
+
+os_error *xfont_read_font_metrics (font_f font, font_bbox_info *bbox_info,
+		font_width_info *xwidth_info, font_width_info *ywidth_info,
+		font_metrics_misc_info *misc_info, font_kern_info *kern_info,
+		font_metric_flags *flags, int *bbox_info_size,
+		int *xwidth_info_size, int *ywidth_info_size,
+		int *misc_info_size, int *kern_info_size)
+{
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
+	if (bbox_info != NULL || xwidth_info != NULL || ywidth_info != NULL ||
+			kern_info != NULL || flags != NULL)
+		return &unimplemented;
+
+	if (misc_info != NULL) {
+		os_error *err = xfont_read_info(font,
+				&misc_info->x0, &misc_info->y0,
+				&misc_info->x1, &misc_info->y1);
+		if (err != NULL)
+			return err;
+		misc_info->xkern = misc_info->ykern = 0;
+		misc_info->italic_correction = 0;
+		misc_info->underline_position = 0;
+		misc_info->underline_thickness = 0;
+		misc_info->cap_height = misc_info->y1 - misc_info->y0;
+		misc_info->xheight = misc_info->cap_height >> 1;
+		misc_info->descender = misc_info->ascender = 0;
+	}
+
+	if (bbox_info_size != NULL)
+		*bbox_info_size = 0;
+	if (xwidth_info_size != NULL)
+		*xwidth_info_size = 0;
+	if (ywidth_info_size != NULL)
+		*ywidth_info_size = 0;
+	if (misc_info_size != NULL)
+		*misc_info_size = sizeof(font_metrics_misc_info);
+	if (kern_info_size != NULL)
+		*kern_info_size = 0;
 
 	return NULL;
 }
