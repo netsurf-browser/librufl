@@ -31,6 +31,7 @@ typedef struct {
 	/* At most 256 active font handles */
 	rufl_test_harness_sized_font fonts[256];
 	int current_font;
+	const char *encoding_filename;
 
 	char *buffer;
 	int buffer_flags;

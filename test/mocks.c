@@ -219,13 +219,17 @@ os_error *xfont_read_encoding_filename (font_f font, char *buffer, int size,
 		return &font_bad_font_number;
 	if (h->fonts[font].refcnt == 0)
 		return &font_no_font;
+	if (h->encoding_filename == NULL)
+		return &font_encoding_not_found;
+	if (buffer == NULL || (size_t) size < strlen(h->encoding_filename) + 1)
+		return &bad_parameters;
 
-	//XXX:
-	(void) buffer;
-	(void) size;
-	(void) end;
+	strcpy(buffer, h->encoding_filename);
 
-	return &unimplemented;
+	if (end != NULL)
+		*end = buffer + strlen(h->encoding_filename) + 1;
+
+	return NULL;
 }
 
 os_error *xfont_list_fonts (byte *buffer1, font_list_context context,

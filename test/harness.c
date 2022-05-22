@@ -83,3 +83,8 @@ void rufl_test_harness_register_encoding(const char *encoding)
 
 	h->encodings[h->n_encodings++] = encoding;
 }
+
+void rufl_test_harness_set_font_encoding(const char *path)
+{
+	h->encoding_filename = path;
+}
