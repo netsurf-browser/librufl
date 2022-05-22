@@ -32,13 +32,13 @@
 /* Enable support for parsing UCS FM sparse encoding files */
 #define SUPPORT_UCS_SPARSE_ENCODING 0
 
-struct rufl_font_list_entry *rufl_font_list = 0;
+struct rufl_font_list_entry *rufl_font_list = NULL;
 size_t rufl_font_list_entries = 0;
-const char **rufl_family_list = 0;
+const char **rufl_family_list = NULL;
 size_t rufl_family_list_entries = 0;
-struct rufl_family_map_entry *rufl_family_map = 0;
-os_error *rufl_fm_error = 0;
-void *rufl_family_menu = 0;
+struct rufl_family_map_entry *rufl_family_map = NULL;
+os_error *rufl_fm_error = NULL;
+void *rufl_family_menu = NULL;
 struct rufl_cache_entry rufl_cache[rufl_CACHE_SIZE];
 uint32_t rufl_cache_time = 0;
 bool rufl_old_font_manager = false;
@@ -362,8 +362,8 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	rufl_font_list[rufl_font_list_entries].identifier = strdup(identifier);
 	if (!rufl_font_list[rufl_font_list_entries].identifier)
 		return rufl_OUT_OF_MEMORY;
-	rufl_font_list[rufl_font_list_entries].charset = 0;
-	rufl_font_list[rufl_font_list_entries].umap = 0;
+	rufl_font_list[rufl_font_list_entries].charset = NULL;
+	rufl_font_list[rufl_font_list_entries].umap = NULL;
 	rufl_font_list_entries++;
 
 	/* determine family, weight, and slant */
