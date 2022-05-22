@@ -1133,7 +1133,8 @@ static rufl_code rufl_init_umap_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	rufl_code result = rufl_OK;
 
 	/* Ignore first 32 character codes (these are control chars) */
-	if (glyph_idx > 31 && glyph_idx < 256 && umap->entries < 256) {
+	if (glyph_idx > 31 && glyph_idx < 256 && umap->entries < 256 &&
+			ucs4 != (uint32_t) -1) {
 		umap->map[umap->entries].u = ucs4;
 		umap->map[umap->entries].c = glyph_idx;
 		umap->entries++;
@@ -1141,7 +1142,7 @@ static rufl_code rufl_init_umap_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	/* Stash the total number of encoding file entries so that
 	 * rufl_init_scan_font_in_encoding can detect the presence of a
 	 * UCS font on a non-UCS capable system. It will clean up for us. */
-	umap->encoding = (void *) (((uintptr_t) umap->encoding) + 1);
+	umap->encoding = (void *) ((uintptr_t) (glyph_idx + 1));
 
 	return result;
 }
@@ -1276,6 +1277,9 @@ static rufl_code emit_codepoint(char s[200], unsigned int i,
 			if (result != rufl_OK)
 				break;
 		}
+	} else {
+		/* No mapping: inform callback in case it cares */
+		result = callback(pw, i, (uint32_t) -1);
 	}
 
 	return result;
