@@ -305,6 +305,14 @@ int main(int argc, const char **argv)
 	assert(3 == offset);
 	assert(50 == x);
 
+	/* Compute width of replacement character */
+	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "\xef\xbf\xbd", 3, &width));
+	assert(17 == width);
+	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "\xf0\xa0\x80\xa5", 4, &width));
+	assert(26 == width);
+
 	rufl_dump_state(true);
 
 	rufl_quit();
