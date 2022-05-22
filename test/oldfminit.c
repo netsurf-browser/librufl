@@ -313,6 +313,14 @@ int main(int argc, const char **argv)
 			(const uint8_t *) "\xf0\xa0\x80\xa5", 4, &width));
 	assert(26 == width);
 
+	/* Measure font bounding box */
+	assert(rufl_OK == rufl_font_bbox("Corpus", rufl_WEIGHT_500, 160,
+			&bbox));
+	assert(0 == bbox.x0);
+	assert(25 == bbox.x1);
+	assert(0 == bbox.y0);
+	assert(25 == bbox.y1);
+
 	rufl_dump_state(true);
 
 	rufl_quit();
