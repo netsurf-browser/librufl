@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "harness-priv.h"
 
@@ -7,8 +8,19 @@ rufl_test_harness_t *h = NULL;
 
 static void rufl_test_harness_free(void)
 {
+	size_t ni, ei;
+
 	free(h->font_names);
 	free(h->encodings);
+	if (h->encoding_filenames != NULL) {
+		for (ni = 0; ni != h->n_font_names; ni++) {
+			for (ei = 0; ei != h->n_encodings; ei++) {
+				free(h->encoding_filenames[
+						(ni * h->n_encodings) + ei]);
+			}
+		}
+	}
+	free(h->encoding_filenames);
 	free(h);
 }
 
@@ -62,6 +74,9 @@ void rufl_test_harness_register_font(const char *name)
 {
 	const char **names;
 
+	/* Encoding paths must be registered last */
+	assert(h->encoding_filenames == NULL);
+
 	names = realloc(h->font_names,
 			(h->n_font_names + 1) * sizeof(*names));
 	assert(names != NULL);
@@ -75,6 +90,9 @@ void rufl_test_harness_register_encoding(const char *encoding)
 {
 	const char **encodings;
 
+	/* Encoding paths must be registered last */
+	assert(h->encoding_filenames == NULL);
+
 	encodings = realloc(h->encodings,
 			(h->n_encodings + 1) * sizeof(*encodings));
 	assert(encodings != NULL);
@@ -84,7 +102,34 @@ void rufl_test_harness_register_encoding(const char *encoding)
 	h->encodings[h->n_encodings++] = encoding;
 }
 
-void rufl_test_harness_set_font_encoding(const char *path)
+void rufl_test_harness_set_font_encoding(const char *fontname,
+		const char *encoding, const char *path)
 {
-	h->encoding_filename = path;
+	size_t ni, ei;
+
+	if (h->encoding_filenames == NULL) {
+		h->encoding_filenames = calloc(
+				h->n_font_names * h->n_encodings,
+				sizeof(*h->encoding_filenames));
+		assert(h->encoding_filenames != NULL);
+	}
+
+	/* Find font index */
+	for (ni = 0; ni < h->n_font_names; ni++) {
+		if (strcmp(h->font_names[ni], fontname) == 0)
+			break;
+	}
+	assert(ni != h->n_font_names);
+
+	/* Find encoding index */
+	for (ei = 0; ei < h->n_encodings; ei++) {
+		if (strcmp(h->encodings[ei], encoding) == 0)
+			break;
+	}
+	assert(ei != h->n_encodings);
+
+	if (h->encoding_filenames[(ni * h->n_encodings) + ei] != NULL)
+		free(h->encoding_filenames[(ni * h->n_encodings) + ei]);
+	h->encoding_filenames[(ni * h->n_encodings) + ei] = strdup(path);
+	assert(h->encoding_filenames[(ni * h->n_encodings) + ei] != NULL);
 }

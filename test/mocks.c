@@ -215,19 +215,27 @@ os_error *xfont_read_font_metrics (font_f font, font_bbox_info *bbox_info,
 os_error *xfont_read_encoding_filename (font_f font, char *buffer, int size,
 		char **end)
 {
+	const char *filename = NULL;
+	size_t ei;
+
 	if (font == 0)
 		return &font_bad_font_number;
 	if (h->fonts[font].refcnt == 0)
 		return &font_no_font;
-	if (h->encoding_filename == NULL)
+	if (h->encoding_filenames == NULL)
 		return &font_encoding_not_found;
-	if (buffer == NULL || (size_t) size < strlen(h->encoding_filename) + 1)
+	ei = h->fonts[font].encoding;
+	filename = h->encoding_filenames[
+		(h->fonts[font].name * h->n_encodings) + ei];
+	if (filename == NULL)
+		return &font_encoding_not_found;
+	if (buffer == NULL || (size_t) size < strlen(filename) + 1)
 		return &bad_parameters;
 
-	strcpy(buffer, h->encoding_filename);
+	strcpy(buffer, filename);
 
 	if (end != NULL)
-		*end = buffer + strlen(h->encoding_filename) + 1;
+		*end = buffer + strlen(filename) + 1;
 
 	return NULL;
 }
