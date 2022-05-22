@@ -573,7 +573,7 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 
 		/* Search the entire space up to the first codepoint it
 		 * reported. */
-		for (u = 0; u != (unsigned int) -1 && u != first; u++) {
+		for (u = 1; u != (unsigned int) -1 && u != first; u++) {
 			rufl_fm_error = xfont_enumerate_characters(font, u,
 					(int *) &next, (int *) &internal);
 			if (rufl_fm_error) {
