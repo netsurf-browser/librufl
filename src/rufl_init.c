@@ -25,6 +25,12 @@
 #include <oslib/wimpreadsysinfo.h>
 #include "rufl_internal.h"
 
+/* Both of the below options are currently disabled as we only parse
+ * Encoding files when using a non-UCS FontManager. */
+/* Enable support for /uniXXXX and /uXXXX[XXXX] form glyph "names" */
+#define SUPPORT_UCS_GLYPH_NAMES 0
+/* Enable support for parsing UCS FM sparse encoding files */
+#define SUPPORT_UCS_SPARSE_ENCODING 0
 
 struct rufl_font_list_entry *rufl_font_list = 0;
 size_t rufl_font_list_entries = 0;
@@ -1157,6 +1163,7 @@ rufl_code rufl_init_populate_unicode_map(font_f f,
 	return result;
 }
 
+#if SUPPORT_UCS_GLYPH_NAMES || SUPPORT_UCS_SPARSE_ENCODING
 static int fromhex(char val, bool permit_lc)
 {
 	if ('0' <= val && val <= '9')
@@ -1167,6 +1174,7 @@ static int fromhex(char val, bool permit_lc)
 		return val - 'a' + 10;
 	return -1;
 }
+#endif
 
 static rufl_code emit_codepoint(char s[200], unsigned int i,
 		rufl_code (*callback)(void *pw,
@@ -1176,6 +1184,7 @@ static rufl_code emit_codepoint(char s[200], unsigned int i,
 	struct rufl_glyph_map_entry *entry;
 	rufl_code result = rufl_OK;
 
+#if SUPPORT_UCS_SPARSE_ENCODING
 	if (s[0] != '/') {
 		/* Sparse encoding entry: [XX;]XXXX;NNN..;.... */
 		uint32_t val = 0;
@@ -1210,10 +1219,13 @@ static rufl_code emit_codepoint(char s[200], unsigned int i,
 			}
 		}
 		/* Fall through to the glyph name search */
-	} else {
+	} else
+#endif
+	{
 		/* Skip the leading / */
 		s += 1;
 
+#if SUPPORT_UCS_GLYPH_NAMES
 		if (!rufl_old_font_manager && s[0] == 'u') {
 			/* Handle /uniXXXX and /uXXXX - /uXXXXXXXX.
 			 * In the case of /uXXXXX - /uXXXXXXXX, no
@@ -1244,6 +1256,7 @@ static rufl_code emit_codepoint(char s[200], unsigned int i,
 
 			/* Otherwise, let the glyph name search decide */
 		}
+#endif
 	}
 
 	entry = bsearch(s, rufl_glyph_map,
@@ -1311,6 +1324,7 @@ rufl_code rufl_init_read_encoding(font_f font,
 				s[0] = c;
 				n = 1;
 				state = STATE_COLLECT;
+#if SUPPORT_UCS_SPARSE_ENCODING
 			} else if (!rufl_old_font_manager &&
 					(('0' <= c && c <= '9') ||
 					 ('A' <= c && c <= 'F') ||
@@ -1319,6 +1333,7 @@ rufl_code rufl_init_read_encoding(font_f font,
 				s[0] = c;
 				n = 1;
 				state = STATE_COLLECT;
+#endif
 			} else if (c <= 0x20) {
 				/* Consume C0 and space */
 			} else {
@@ -1838,7 +1853,7 @@ rufl_code rufl_load_cache(void)
 		charset = NULL;
 		size = 0;
 
-                free(identifier);
+		free(identifier);
 	}
 	fclose(fp);
 
