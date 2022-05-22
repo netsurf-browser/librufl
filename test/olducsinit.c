@@ -72,21 +72,25 @@ int main(int argc, const char **argv)
 	assert(0 == uline_position);
 	assert(0 == uline_thickness);
 
-	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 10,
+	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
 			(const uint8_t *) "!\xc2\xa0", 3, &width));
-	assert(2 == width);
+	assert(50 == width);
 
-	assert(rufl_OK == rufl_x_to_offset("Homerton", rufl_WEIGHT_500, 10,
-			(const uint8_t *) "!\xc2\xa0", 3, 1,
+	/* Place caret after first character */
+	assert(rufl_OK == rufl_x_to_offset("Homerton", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "!\xc2\xa0", 3, 25,
 			&offset, &x));
 	assert(1 == offset);
-	assert(1 == x);
+	assert(25 == x);
 
-	assert(rufl_OK == rufl_split("Trinity", rufl_WEIGHT_500, 10,
-			(const uint8_t *) "!\xc2\xa0", 3, 1,
+	/* Attempt to split after first character. As the split point is
+	 * coincident with the start of the second character, however,
+	 * the split point is placed after it. */
+	assert(rufl_OK == rufl_split("Trinity", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "!\xc2\xa0", 3, 25,
 			&offset, &x));
-	assert(1 == offset);
-	assert(1 == x);
+	assert(3 == offset);
+	assert(50 == x);
 
 	rufl_dump_state(true);
 

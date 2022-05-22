@@ -363,6 +363,7 @@ os_error *xfont_scan_string (font_f font, char const *s,
 	/* Consume up to length bytes of input */
 	while (length > 0) {
 		uint32_t c = 0, i;
+		int cwidth;
 		for (i = 0; i < advance; i++) {
 			c |= s[i] << (advance - i - 1);
 		}
@@ -374,7 +375,16 @@ os_error *xfont_scan_string (font_f font, char const *s,
 			break;
 
 		/* Just scale font size to millipoints and add on the width */
-		width += ((h->fonts[font].xsize * 1000) >> 4);
+		cwidth = ((h->fonts[font].xsize * 1000) >> 4);
+		if ((flags & font_RETURN_CARET_POS) && x > 0 &&
+				(width + cwidth/2) > x) {
+			/* Split point is less than half way through
+			 * this character: exclude it */
+			s -= advance;
+			length += advance;
+			break;
+		}
+		width += cwidth;
 		//XXX: how is negative x meant to work?
 		if (x > 0 && width > x)
 			break;
@@ -391,10 +401,11 @@ os_error *xfont_scan_string (font_f font, char const *s,
 		*x_out = width;
 	if (y_out != NULL)
 		*y_out = (h->fonts[font].ysize * 1000) >> 4;
+	if (split_point != NULL)
+		*split_point = (char *) s;
 
 	(void) y;
 	(void) trfm;
-	(void) split_point;
 	(void) num_split_chars;
 
 	return NULL;
@@ -422,7 +433,7 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	static int extchars[] = {     0x20, 0x21, 0x30, 0x31, 0x40, -1 };
+	static int extchars[] = {     0x20, 0x21, 0x30, 0x31, 0xa0, -1 };
 	static int intchars[] = { -1,    1,    2,   -1,    3,    4 };
 	int index;
 
