@@ -321,6 +321,10 @@ int main(int argc, const char **argv)
 	assert(0 == bbox.y0);
 	assert(25 == bbox.y1);
 
+	/* Trivial render */
+	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "!\xc2\xa0", 3, 0, 0, 0));
+
 	rufl_dump_state(true);
 
 	rufl_quit();

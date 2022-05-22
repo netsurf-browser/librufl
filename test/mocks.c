@@ -342,7 +342,7 @@ os_error *xfont_paint (font_f font, char const *string,
 	(void) trfm;
 	(void) length;
 
-	return &unimplemented;
+	return NULL;
 }
 
 os_error *xfont_scan_string (font_f font, char const *s,
