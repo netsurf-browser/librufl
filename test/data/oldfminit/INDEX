@@ -3,3 +3,4 @@
 # Test			Description
 
 latin1.cfg		Simple Latin1 Encoding
+nomapping.cfg		Fonts with no mapping

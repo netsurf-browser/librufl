@@ -364,6 +364,7 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 		return rufl_OUT_OF_MEMORY;
 	rufl_font_list[rufl_font_list_entries].charset = NULL;
 	rufl_font_list[rufl_font_list_entries].umap = NULL;
+	rufl_font_list[rufl_font_list_entries].num_umaps = 0;
 	rufl_font_list_entries++;
 
 	/* determine family, weight, and slant */
@@ -891,6 +892,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 					error_FONT_TOO_MANY_CHUNKS)) {
 			/* Ensure we reuse the currently allocated umap */
 			num_umaps--;
+			rufl_fm_error = NULL;
 		} else if (code != rufl_OK) {
 			LOG("rufl_init_scan_font_in_encoding(\"%s\", \"%s\", "
 			    "...): 0x%x (0x%x: %s)",
@@ -957,6 +959,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 					error_FONT_TOO_MANY_CHUNKS)) {
 			/* Ensure we reuse the currently allocated umap */
 			num_umaps--;
+			rufl_fm_error = NULL;
 		} else if (code != rufl_OK) {
 			LOG("rufl_init_scan_font_in_encoding(\"%s\", NULL, "
 			    "...): 0x%x (0x%x: %s)",
