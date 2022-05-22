@@ -437,9 +437,10 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	static int extchars[] = {     0x20, 0x21, 0x30, 0x31, 0xa0, -1 };
-	static int intchars[] = { -1,    1,    2,   -1,    3,    4 };
-	int index;
+	static int extchars[] = { 0x20, 0x21, 0x30, 0x31, 0x32, 0xa0, -1 };
+	static int intchars[] = {    1,    2,    3,    4,   -1,    5 };
+	size_t index = 0;
+	int next = -1, internal = -1;
 
 	if (!h->fm_ucs)
 		return &no_such_swi;
@@ -451,23 +452,33 @@ os_error *xfont_enumerate_characters (font_f font, int character,
 	if (h->fonts[font].refcnt == 0)
 		return &font_no_font;
 
-	/* First character */
-	if (character == 0) {
-		index = 0;
-		if (h->fm_broken_fec)
-			index = 2;
-	} else {
-		for (index = 0; index < 6; index++) {
-			if (extchars[index] == character)
-				break;
+	/* Broken FEC: skip first chunk unless code is valid.
+	 * (only 0x20 and 0x21 are valid in the first chunk here,
+	 * so we simply need to skip over these if the code is
+	 * less than 0x20 -- any other codes in the first chunk
+	 * will just fall out of the usual "next code" logic)
+	 */
+	if (h->fm_broken_fec && character < extchars[0])
+		index = 2;
+
+	for (; index < (sizeof(intchars)/sizeof(intchars[0])); index++) {
+		if (extchars[index] == character) {
+			/* Found: return it and compute next */
+			next = extchars[index+1];
+			internal = intchars[index];
+			break;
+		} else if (extchars[index] > character) {
+			/* Not found and won't be: compute next */
+			next = extchars[index];
+			internal = -1;
+			break;
 		}
-		index++;
 	}
 
 	if (next_character != NULL)
-		*next_character = extchars[index];
+		*next_character = next;
 	if (internal_character_code != NULL)
-		*internal_character_code = intchars[index];
+		*internal_character_code = internal;
 
 	return NULL;
 }
