@@ -14,9 +14,9 @@ static void rufl_test_harness_free(void)
 	free(h->encodings);
 	if (h->encoding_filenames != NULL) {
 		for (ni = 0; ni != h->n_font_names; ni++) {
-			for (ei = 0; ei != h->n_encodings; ei++) {
+			for (ei = 0; ei != h->n_encodings + 1; ei++) {
 				free(h->encoding_filenames[
-						(ni * h->n_encodings) + ei]);
+						(ni * (h->n_encodings + 1)) + ei]);
 			}
 		}
 	}
@@ -109,7 +109,7 @@ void rufl_test_harness_set_font_encoding(const char *fontname,
 
 	if (h->encoding_filenames == NULL) {
 		h->encoding_filenames = calloc(
-				h->n_font_names * h->n_encodings,
+				h->n_font_names * (h->n_encodings + 1),
 				sizeof(*h->encoding_filenames));
 		assert(h->encoding_filenames != NULL);
 	}
@@ -122,14 +122,18 @@ void rufl_test_harness_set_font_encoding(const char *fontname,
 	assert(ni != h->n_font_names);
 
 	/* Find encoding index */
-	for (ei = 0; ei < h->n_encodings; ei++) {
-		if (strcmp(h->encodings[ei], encoding) == 0)
-			break;
+	if (strcmp("Symbol", encoding) == 0) {
+		ei = h->n_encodings;
+	} else {
+		for (ei = 0; ei < h->n_encodings; ei++) {
+			if (strcmp(h->encodings[ei], encoding) == 0)
+				break;
+		}
+		assert(ei != h->n_encodings);
 	}
-	assert(ei != h->n_encodings);
 
-	if (h->encoding_filenames[(ni * h->n_encodings) + ei] != NULL)
-		free(h->encoding_filenames[(ni * h->n_encodings) + ei]);
-	h->encoding_filenames[(ni * h->n_encodings) + ei] = strdup(path);
-	assert(h->encoding_filenames[(ni * h->n_encodings) + ei] != NULL);
+	if (h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei] != NULL)
+		free(h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei]);
+	h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei] = strdup(path);
+	assert(h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei] != NULL);
 }

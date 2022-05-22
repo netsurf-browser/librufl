@@ -65,10 +65,10 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	/* Parse font name */
 	slash = strchr(font_name, '\\');
 	if (slash == NULL) {
-		/* Bare name: assume Latin1 encoding */
+		/* Bare name: symbol font */
 		strncpy(name, font_name, sizeof(name));
 		name[sizeof(name)-1] = '\0';
-		strcpy(encoding, "Latin1");
+		strcpy(encoding, "Symbol");
 	} else {
 		/* Identifier: extract encoding */
 		strncpy(name, font_name, slash - font_name);
@@ -88,12 +88,16 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	}
 
 	/* Determine if we know about this encoding */
-	for (ei = 0; ei < h->n_encodings; ei++) {
-		if (strcmp(h->encodings[ei], encoding) == 0)
-			break;
-	}
-	if (ei == h->n_encodings) {
-		return &font_encoding_not_found;
+	if (strcmp("Symbol", encoding) == 0) {
+		ei = FONT_ENCODING_SYMBOL;
+	} else {
+		for (ei = 0; ei < h->n_encodings; ei++) {
+			if (strcmp(h->encodings[ei], encoding) == 0)
+				break;
+		}
+		if (ei == h->n_encodings) {
+			return &font_encoding_not_found;
+		}
 	}
 
 	/* Find existing font handle (0 is forbidden) */
@@ -224,9 +228,13 @@ os_error *xfont_read_encoding_filename (font_f font, char *buffer, int size,
 		return &font_no_font;
 	if (h->encoding_filenames == NULL)
 		return &font_encoding_not_found;
-	ei = h->fonts[font].encoding;
+	if (h->fonts[font].encoding != FONT_ENCODING_SYMBOL) {
+		ei = h->fonts[font].encoding;
+	} else {
+		ei = h->n_encodings;
+	}
 	filename = h->encoding_filenames[
-		(h->fonts[font].name * h->n_encodings) + ei];
+		(h->fonts[font].name * (h->n_encodings + 1)) + ei];
 	if (filename == NULL)
 		return &font_encoding_not_found;
 	if (buffer == NULL || (size_t) size < strlen(filename) + 1)

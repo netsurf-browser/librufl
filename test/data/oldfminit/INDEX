@@ -5,3 +5,4 @@
 latin1.cfg		Simple Latin1 Encoding
 mergeumap.cfg		Merge identical umaps
 nomapping.cfg		Fonts with no mapping
+symbol.cfg		Simple symbol fonts

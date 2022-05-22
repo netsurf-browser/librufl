@@ -10,6 +10,7 @@
 typedef struct {
 	unsigned int refcnt;
 	size_t name; /* Index of name in names array */
+#define FONT_ENCODING_SYMBOL ((size_t) -1) /* Symbol, not language, font */
 	size_t encoding; /* Index of encoding in encodings array */
 	int xsize; /* XSize of this font */
 	int ysize; /* YSize if this font */
@@ -28,7 +29,7 @@ typedef struct {
 	const char **encodings;
 	size_t n_encodings;
 
-	/* n_font_names * n_encodings entries */
+	/* n_font_names * (n_encodings + 1) entries */
 	char **encoding_filenames;
 
 	/* At most 256 active font handles */
