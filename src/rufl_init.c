@@ -911,6 +911,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 						memcmp(a->map, b->map, 
 							sizeof a->map) == 0) {
 					/* Found identical map; discard */
+					free(b->encoding);
 					num_umaps--;
 					break;
 				}

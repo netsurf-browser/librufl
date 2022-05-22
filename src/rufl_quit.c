@@ -24,6 +24,13 @@ void rufl_quit(void)
 	for (i = 0; i != rufl_font_list_entries; i++) {
 		free(rufl_font_list[i].identifier);
 		free(rufl_font_list[i].charset);
+		if (rufl_font_list[i].umap != NULL) {
+			size_t j;
+			for (j = 0; j != rufl_font_list[i].num_umaps; j++) {
+				free((rufl_font_list[i].umap + j)->encoding);
+			}
+			free(rufl_font_list[i].umap);
+		}
 	}
 	free(rufl_font_list);
 	rufl_font_list = 0;
