@@ -96,6 +96,14 @@ int main(int argc, const char **argv)
 
 	rufl_quit();
 
+	/* Reinit -- should load cache */
+	assert(rufl_OK == rufl_init());
+	assert(NULL == rufl_fm_error);
+	assert(3 == rufl_family_list_entries);
+	assert(NULL != rufl_family_menu);
+	/* Done for real this time */
+	rufl_quit();
+
 	printf("PASS\n");
 
 	return 0;

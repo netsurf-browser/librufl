@@ -1590,7 +1590,7 @@ rufl_code rufl_load_cache(void)
 	struct rufl_font_list_entry *entry;
 	struct rufl_character_set *charset = NULL, *cur_charset;
 	struct rufl_unicode_map *umap = NULL;
-	unsigned int num_umaps = 0;
+	size_t num_umaps = 0;
 
 	fp = rufl_open_cache("rb");
 	if (!fp)
