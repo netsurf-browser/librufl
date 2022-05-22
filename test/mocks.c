@@ -453,8 +453,8 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	static int extchars[] = { 0x20, 0x21, 0x30, 0x31, 0x32, 0xa0, -1 };
-	static int intchars[] = {    1,    2,    3,    4,   -1,    5 };
+	static int extchars[] = { 0x20, 0x21, 0x30, 0x31, 0x32, 0xa0, 0x10ac0, 0x20021, 0x30000, -1 };
+	static int intchars[] = {    1,    2,    3,    4,   -1,    5,       6,       7,       8 };
 	size_t index = 0;
 	int next = -1, internal = -1;
 
