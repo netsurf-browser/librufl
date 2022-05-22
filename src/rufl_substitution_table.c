@@ -17,6 +17,8 @@
  * Base type for a substitution table.
  */
 struct rufl_substitution_table {
+	/** Description of table implementation */
+	const char *desc;
 	/** Look up a Unicode codepoint. */
 	unsigned int (*lookup)(const struct rufl_substitution_table *t,
 			uint32_t u);
@@ -26,7 +28,8 @@ struct rufl_substitution_table {
 	void (*dump)(const struct rufl_substitution_table *t,
 			unsigned int plane);
 	/** Compute the storage size of this table */
-	size_t (*size)(const struct rufl_substitution_table *t);
+	size_t (*size)(const struct rufl_substitution_table *t,
+			unsigned int *glyph_count);
 };
 
 /**
@@ -353,16 +356,27 @@ static void rufl_substitution_table_dump_chd(
 }
 
 static size_t rufl_substitution_table_size_chd(
-		const struct rufl_substitution_table *ts)
+		const struct rufl_substitution_table *ts,
+		unsigned int *glyph_count)
 {
 	const struct rufl_substitution_table_chd *t = (const void *) ts;
 	size_t size = sizeof(*t);
+	unsigned int count = 0;
+	uint32_t i;
 
 	/* Add on displacement map size */
 	size += (t->num_buckets * t->bits_per_entry + 7) >> 3;
 
 	/* Add on table size */
 	size += t->num_slots * sizeof(*t->table);
+
+	/* Count glyphs */
+	for (i = 0; i < t->num_slots; i++) {
+		if ((t->table[i] & 0xffff) != NOT_AVAILABLE)
+			count++;
+	}
+	if (glyph_count != NULL)
+		*glyph_count = count;
 
 	return size;
 }
@@ -415,6 +429,7 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 		t64[i] = NOT_AVAILABLE;
 	}
 
+	subst_table->base.desc = "CHD";
 	subst_table->base.lookup = rufl_substitution_table_lookup_chd;
 	subst_table->base.free = rufl_substitution_table_free_chd;
 	subst_table->base.dump = rufl_substitution_table_dump_chd;
@@ -720,11 +735,13 @@ static void rufl_substitution_table_dump_direct(
 }
 
 static size_t rufl_substitution_table_size_direct(
-		const struct rufl_substitution_table *ts)
+		const struct rufl_substitution_table *ts,
+		unsigned int *glyph_count)
 {
 	const struct rufl_substitution_table_direct *t = (const void *) ts;
 	size_t size = sizeof(*t);
 	unsigned int i, block_idx = 0;
+	unsigned int count = 0, na;
 
 	/* Find the largest block index (blocks are contiguous) */
 	for (i = 0; i < 256; i++)
@@ -733,6 +750,22 @@ static size_t rufl_substitution_table_size_direct(
 
 	/* Add on table size */
 	size += (t->bits_per_entry * (block_idx + 1) * 256) >> 3;
+
+	/* Count glyphs */
+	na = NOT_AVAILABLE & ((t->bits_per_entry == 8) ? 0xff : 0xffff);
+	for (i = 0; i < 0x10000; i++) {
+		const uint8_t *t8 = (const uint8_t *) t->table;
+
+#define LOOKUP(u) (t->bits_per_entry == 8 \
+		? t8[t->index[(u >> 8) & 0xff] * 256 + (u & 0xff)] \
+		: t->table[t->index[(u >> 8) & 0xff] * 256 + (u & 0xff)])
+
+		if (LOOKUP(i) != na)
+			count++;
+#undef LOOKUP
+	}
+	if (glyph_count != NULL)
+		*glyph_count = count;
 
 	return size;
 }
@@ -752,6 +785,7 @@ static rufl_code direct(uint64_t *table, size_t table_entries,
 	if (!subst_table)
 		return rufl_OUT_OF_MEMORY;
 
+	subst_table->base.desc = "Direct";
 	subst_table->base.lookup = rufl_substitution_table_lookup_direct;
 	subst_table->base.free = rufl_substitution_table_free_direct;
 	subst_table->base.dump = rufl_substitution_table_dump_direct;
@@ -1002,7 +1036,8 @@ static rufl_code create_substitution_table_for_plane(unsigned int plane)
 			direct_size, chd_size,
 			rufl_substitution_table[plane] ?
 				rufl_substitution_table[plane]->size(
-					rufl_substitution_table[plane]) : 0);
+					rufl_substitution_table[plane],
+					NULL) : 0);
 #endif
 
 	free(charsets);
@@ -1073,7 +1108,7 @@ unsigned int rufl_substitution_table_lookup(uint32_t u)
 
 void rufl_substitution_table_dump(void)
 {
-	unsigned int plane;
+	unsigned int plane, glyphs = 0;
 	size_t size = 0;
 
 	for (plane = 0; plane < 17; plane++) {
@@ -1081,10 +1116,28 @@ void rufl_substitution_table_dump(void)
 			continue;
 		rufl_substitution_table[plane]->dump(
 				rufl_substitution_table[plane], plane);
-		size += rufl_substitution_table[plane]->size(
-				rufl_substitution_table[plane]);
 	}
 
-	printf("  Total substitution table storage: %zu bytes\n",
-			size + sizeof(rufl_substitution_table));
+	for (plane = 0; plane < 17; plane++) {
+		size_t plane_size;
+		unsigned int plane_glyphs;
+		const char *plane_desc;
+
+		if (!rufl_substitution_table[plane]) {
+			plane_size = 0;
+			plane_glyphs = 0;
+			plane_desc = "None";
+		} else {
+			plane_size = rufl_substitution_table[plane]->size(
+				rufl_substitution_table[plane], &plane_glyphs);
+			plane_desc = rufl_substitution_table[plane]->desc;
+		}
+		size += plane_size;
+		glyphs += plane_glyphs;
+		printf("              Storage for plane %2d: %8zu bytes %7u glyphs (%s)\n",
+				plane + 1, plane_size, plane_glyphs, plane_desc);
+	}
+
+	printf("  Total substitution table storage: %8zu bytes %7u glyphs\n",
+			size + sizeof(rufl_substitution_table), glyphs);
 }
