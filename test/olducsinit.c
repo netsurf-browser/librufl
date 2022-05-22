@@ -35,6 +35,7 @@ int main(int argc, const char **argv)
 	int width, x;
 	size_t offset;
 	int32_t xkern, ykern, italic, ascent, descent, xheight, cap_height;
+	int32_t x_bearing, y_bearing, mwidth, mheight, x_advance, y_advance;
 	int8_t uline_position;
 	uint8_t uline_thickness;
 	os_box bbox;
@@ -111,6 +112,17 @@ int main(int argc, const char **argv)
 	/* Trivial render */
 	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
 			(const uint8_t *) "!\xc2\xa0", 3, 0, 0, 0));
+
+	/* Obtain metrics for a glyph */
+	assert(rufl_OK == rufl_glyph_metrics("Homerton", rufl_WEIGHT_500, 160,
+			(const uint8_t *) "!", 1, &x_bearing, &y_bearing,
+			&mwidth, &mheight, &x_advance, &y_advance));
+	assert(0 == x_bearing);
+	assert(10000 == y_bearing);
+	assert(10000 == mwidth);
+	assert(10000 == mheight);
+	assert(10000 == x_advance);
+	assert(10000 == y_advance);
 
 	rufl_dump_state(true);
 
