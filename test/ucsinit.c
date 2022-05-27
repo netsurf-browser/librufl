@@ -74,13 +74,12 @@ int main(int argc, const char **argv)
 	assert(0 == uline_thickness);
 
 	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "!\xc2\xa0", 3, &width));
+			"!\xc2\xa0", 3, &width));
 	assert(50 == width);
 
 	/* Place caret after first character */
 	assert(rufl_OK == rufl_x_to_offset("Homerton", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "!\xc2\xa0", 3, 25,
-			&offset, &x));
+			"!\xc2\xa0", 3, 25, &offset, &x));
 	assert(1 == offset);
 	assert(25 == x);
 
@@ -88,17 +87,16 @@ int main(int argc, const char **argv)
 	 * coincident with the start of the second character, however,
 	 * the split point is placed after it. */
 	assert(rufl_OK == rufl_split("Trinity", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "!\xc2\xa0", 3, 25,
-			&offset, &x));
+			"!\xc2\xa0", 3, 25, &offset, &x));
 	assert(3 == offset);
 	assert(50 == x);
 
 	/* Compute width of replacement character */
 	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "\xef\xbf\xbd", 3, &width));
+			"\xef\xbf\xbd", 3, &width));
 	assert(17 == width);
 	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "\xf0\xa0\x80\xa5", 4, &width));
+			"\xf0\xa0\x80\xa5", 4, &width));
 	assert(26 == width);
 
 	/* Measure font bounding box */
@@ -111,11 +109,11 @@ int main(int argc, const char **argv)
 
 	/* Trivial render */
 	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "!\xc2\xa0", 3, 0, 0, 0));
+			"!\xc2\xa0", 3, 0, 0, 0));
 
 	/* Obtain metrics for a glyph */
 	assert(rufl_OK == rufl_glyph_metrics("Homerton", rufl_WEIGHT_500, 160,
-			(const uint8_t *) "!", 1, &x_bearing, &y_bearing,
+			"!", 1, &x_bearing, &y_bearing,
 			&mwidth, &mheight, &x_advance, &y_advance));
 	assert(0 == x_bearing);
 	assert(10000 == y_bearing);

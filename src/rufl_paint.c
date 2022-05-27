@@ -58,12 +58,13 @@ static rufl_code rufl_process_not_available(rufl_action action,
 
 rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int x, int y, unsigned int flags)
 {
 	return rufl_process(rufl_PAINT,
-			font_family, font_style, font_size, string,
-			length, x, y, flags, 0, 0, 0, 0, 0, 0);
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			x, y, flags, 0, 0, 0, 0, 0, 0);
 }
 
 
@@ -73,12 +74,13 @@ rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_width(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int *width)
 {
 	return rufl_process(rufl_WIDTH,
-			font_family, font_style, font_size, string,
-			length, 0, 0, 0, width, 0, 0, 0, 0, 0);
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			0, 0, 0, width, 0, 0, 0, 0, 0);
 }
 
 
@@ -89,14 +91,14 @@ rufl_code rufl_width(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int click_x,
 		size_t *char_offset, int *actual_x)
 {
 	return rufl_process(rufl_X_TO_OFFSET,
-			font_family, font_style, font_size, string,
-			length, 0, 0, 0, 0,
-			click_x, char_offset, actual_x, 0, 0);
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			0, 0, 0, 0, click_x, char_offset, actual_x, 0, 0);
 }
 
 
@@ -106,14 +108,14 @@ rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_split(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int width,
 		size_t *char_offset, int *actual_x)
 {
 	return rufl_process(rufl_SPLIT,
-			font_family, font_style, font_size, string,
-			length, 0, 0, 0, 0,
-			width, char_offset, actual_x, 0, 0);
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			0, 0, 0, 0, width, char_offset, actual_x, 0, 0);
 }
 
 
@@ -123,13 +125,14 @@ rufl_code rufl_split(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int x, int y,
 		rufl_callback_t callback, void *context)
 {
 	return rufl_process(rufl_PAINT_CALLBACK,
-			font_family, font_style, font_size, string,
-			length, x, y, 0, 0, 0, 0, 0, callback, context);
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			x, y, 0, 0, 0, 0, 0, callback, context);
 }
 
 

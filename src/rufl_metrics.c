@@ -114,11 +114,12 @@ rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
  */
 rufl_code rufl_glyph_metrics(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int32_t *x_bearing, int32_t *y_bearing,
 		int32_t *width, int32_t *height,
 		int32_t *x_advance, int32_t *y_advance)
 {
+	const uint8_t *ustring = (const uint8_t *) string;
 	const char *font_encoding = NULL;
 	unsigned int font, font1, u;
 	uint32_t u1[2];
@@ -136,7 +137,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	if (code != rufl_OK)
 		return code;
 
-	rufl_utf8_read(string, length, u);
+	rufl_utf8_read(ustring, length, u);
 	if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
 	else {

@@ -24,7 +24,7 @@ static void callback(void *context,
 
 int main(void)
 {
-	const uint8_t utf8_test[] = "Hello,	world! ὕαλον "
+	const char utf8_test[] = "Hello,	world! ὕαλον "
 			"Uherské Hradiště. 𐀀"
 			"\xf0\xa0\x80\xa1";
 	int width;
@@ -58,7 +58,7 @@ int main(void)
 				char_offset, utf8_test + char_offset);
 	}
 	try(rufl_decompose_glyph("Homerton", rufl_WEIGHT_400, 1280,
-				(const uint8_t *) "A", 1, &funcs, 0),
+				"A", 1, &funcs, 0),
 				"rufl_decompose_glyph");
 	try(rufl_paint_callback("NewHall", rufl_WEIGHT_400, 240,
 			utf8_test, sizeof utf8_test - 1,

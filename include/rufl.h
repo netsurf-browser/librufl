@@ -86,7 +86,7 @@ rufl_code rufl_init(void);
 
 rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int x, int y, unsigned int flags);
 
 
@@ -96,7 +96,7 @@ rufl_code rufl_paint(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_width(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int *width);
 
 
@@ -106,7 +106,7 @@ rufl_code rufl_width(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int click_x,
 		size_t *char_offset, int *actual_x);
 
@@ -117,7 +117,7 @@ rufl_code rufl_x_to_offset(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_split(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int width,
 		size_t *char_offset, int *actual_x);
 
@@ -135,7 +135,7 @@ typedef void (*rufl_callback_t)(void *context,
 
 rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 		unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int x, int y,
 		rufl_callback_t callback, void *context);
 
@@ -146,7 +146,7 @@ rufl_code rufl_paint_callback(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_decompose_glyph(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		struct rufl_decomp_funcs *funcs, void *user);
 
 
@@ -167,7 +167,7 @@ rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
 
 rufl_code rufl_glyph_metrics(const char *font_family,
 		rufl_style font_style, unsigned int font_size,
-		const uint8_t *string, size_t length,
+		const char *string, size_t length,
 		int32_t *x_bearing, int32_t *y_bearing,
 		int32_t *width, int32_t *height,
 		int32_t *x_advance, int32_t *y_advance);
