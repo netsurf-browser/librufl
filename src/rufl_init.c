@@ -571,10 +571,14 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 					rufl_fm_error->errmess);
 			return rufl_FONT_MANAGER_ERROR;
 		}
+		if (first == (unsigned int) -1) {
+			/* Font has no defined characters */
+			return rufl_OK;
+		}
 
 		/* Search the entire space up to the first codepoint it
 		 * reported. */
-		for (u = 1; u != (unsigned int) -1 && u != first; u++) {
+		for (u = 1; u != first; u++) {
 			rufl_fm_error = xfont_enumerate_characters(font, u,
 					(int *) &next, (int *) &internal);
 			if (rufl_fm_error) {
@@ -583,8 +587,7 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 						font_name, u,
 						rufl_fm_error->errnum,
 						rufl_fm_error->errmess);
-				result = rufl_FONT_MANAGER_ERROR;
-				break;
+				return rufl_FONT_MANAGER_ERROR;
 			}
 
 			/* Skip unmapped characters */
@@ -594,7 +597,7 @@ static rufl_code rufl_init_enumerate_characters(const char *font_name,
 			/* Character is mapped, emit it */
 			result = callback(pw, internal, u);
 			if (result != rufl_OK)
-				break;
+				return result;
 		}
 
 		/* Now fall through to the normal path */
