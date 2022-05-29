@@ -818,7 +818,7 @@ static rufl_code direct(uint64_t *table, size_t table_entries,
 
 	/* Allocate table */
 	//XXX: can we just rearrange the existing one in-place?
-	subst_table->table = malloc(table_size);
+	subst_table->table = malloc(table_size * (subst_table->bits_per_entry >> 3));
 	if (!subst_table->table) {
 		free(subst_table);
 		return rufl_OUT_OF_MEMORY;
