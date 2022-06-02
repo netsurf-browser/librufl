@@ -45,6 +45,10 @@ bool rufl_old_font_manager = false;
 static bool rufl_broken_font_enumerate_characters = false;
 wimp_w rufl_status_w = 0;
 char rufl_status_buffer[80];
+#if 1 /* ndef NDEBUG */
+bool rufl_log_got_start_time;
+time_t rufl_log_start_time;
+#endif
 
 /** An entry in rufl_weight_table. */
 struct rufl_weight_table_entry {

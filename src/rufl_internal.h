@@ -250,22 +250,20 @@ extern const size_t rufl_glyph_map_size;
 
 
 #if 1 /*ndef NDEBUG*/
-#ifdef __CC_NORCROFT
-#define __PRETTY_FUNCTION__ __func__
-#endif
 #include <time.h>
-bool log_got_start_time;
-time_t log_start_time;
+extern bool rufl_log_got_start_time;
+extern time_t rufl_log_start_time;
 #define LOG(format, ...)						\
 	do {								\
-		if (log_got_start_time == false) {			\
-			log_start_time = time(NULL);			\
-			log_got_start_time = true;			\
+		if (rufl_log_got_start_time == false) {			\
+			rufl_log_start_time = time(NULL);		\
+			rufl_log_got_start_time = true;			\
 		}							\
 									\
 		fprintf(stderr,"(%.6fs) " __FILE__ " %s %i: ",		\
-				difftime(time(NULL), log_start_time),	\
-				__PRETTY_FUNCTION__, __LINE__);		\
+				difftime(time(NULL),			\
+					rufl_log_start_time),		\
+				__func__, __LINE__);			\
 		fprintf(stderr, format, __VA_ARGS__);			\
 		fprintf(stderr, "\n");					\
 	} while (0)
