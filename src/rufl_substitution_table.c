@@ -418,12 +418,11 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 	/* We know there are at least table_entries in the table, but
 	 * we should now resize it to the size of the target hashtable.
 	 * We still want each entry to be 64bits wide at this point. */
-	subst_table->table = realloc(table, range * sizeof(*table));
-	if (!subst_table->table) {
+	t64 = realloc(table, range * sizeof(*t64));
+	if (!t64) {
 		free(subst_table);
 		return rufl_OUT_OF_MEMORY;
 	}
-	t64 = (uint64_t *) subst_table->table;
 	/* Initialise unused slots */
 	for (i = table_entries; i < range; i++) {
 		t64[i] = NOT_AVAILABLE;
@@ -437,6 +436,7 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 	subst_table->num_buckets = buckets;
 	subst_table->num_slots = range;
 	subst_table->bits_per_entry = bits_needed(max_displacement);
+	subst_table->table = (uint32_t *) t64;
 
 	/* Fill in displacement map */
 	//XXX: compress map using Fredriksson-Nikitin encoding?
@@ -505,10 +505,10 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 	/* Shrink the table to its final size. If this fails, leave
 	 * the existing data intact as it's correct -- we just have
 	 * twice the storage usage we need. */
-	table = realloc(subst_table->table,
+	subst_table->table = realloc(t64,
 			range * sizeof(*subst_table->table));
-	if (table)
-		subst_table->table = (uint32_t *) table;
+	if (!subst_table->table)
+		subst_table->table = (uint32_t *) t64;
 
 	*substitution_table = &subst_table->base;
 
