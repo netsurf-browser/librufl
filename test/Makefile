@@ -1,5 +1,5 @@
 # Tests
-ifeq ($(HOST),arm-unknown-riscos)
+ifeq ($(findstring -riscos,$(HOST)),-riscos)
   DIR_TEST_ITEMS := $(DIR_TEST_ITEMS) \
 	  rufl_test:rufl_test.c \
 	  rufl_chars:rufl_chars.c

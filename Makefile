@@ -15,7 +15,7 @@ TESTRUNNER := $(PERL) $(NSTESTTOOLS)/testrunner.pl
 WARNFLAGS := -Wall -W -Wundef -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes \
 	-Wmissing-declarations -Wnested-externs
-ifeq ($(HOST),arm-unknown-riscos)
+ifeq ($(findstring -riscos,$(HOST)),-riscos)
   WARNFLAGS := $(WARNFLAGS) -pedantic
 endif
 # BeOS/Haiku/AmigaOS4 standard library headers create warnings
@@ -35,7 +35,7 @@ CFLAGS := $(CFLAGS) -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=500
 
 # OSLib
 ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)
-  ifeq ($(HOST),arm-unknown-riscos)
+  ifeq ($(findstring -riscos,$(HOST)),-riscos)
     CFLAGS := $(CFLAGS) -I$(PREFIX)/include
     LDFLAGS := $(LDFLAGS) -lOSLib32
     TESTLDFLAGS := $(TESTLDFLAGS) -static
