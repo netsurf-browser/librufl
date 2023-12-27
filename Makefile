@@ -1,6 +1,6 @@
 # Component settings
 COMPONENT := rufl
-COMPONENT_VERSION := 0.0.5
+COMPONENT_VERSION := 0.1.0
 # Default to a static library
 COMPONENT_TYPE ?= lib-static
 
