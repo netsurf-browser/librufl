@@ -6,6 +6,7 @@
  */
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 
 #include <oslib/font.h>
@@ -71,7 +72,7 @@ rufl_code rufl_decompose_glyph(const char *font_family,
 		struct rufl_decomp_funcs *funcs, void *user)
 {
 	int *buf, *p, *ep;
-	int buf_size;
+	uintptr_t buf_size;
 	char *buf_end;
 	rufl_code err;
 
@@ -100,12 +101,13 @@ rufl_code rufl_decompose_glyph(const char *font_family,
 				rufl_fm_error->errmess);
 		return rufl_FONT_MANAGER_ERROR;
 	}
-	buf_size = buf_end - (char *)NULL;
+	buf_size = (uintptr_t) buf_end;
 
 	/* Allocate and initialise buffer */
 	buf = malloc(buf_size);
 	if (!buf) {
-		LOG("Failed to allocate decompose buffer of size %i", buf_size);
+		LOG("Failed to allocate decompose buffer of size %" PRIuPTR,
+				buf_size);
 		return rufl_OUT_OF_MEMORY;
 	}
 	buf[0] = 0;
