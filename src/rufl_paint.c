@@ -257,6 +257,7 @@ rufl_code rufl_process(rufl_action action,
 		if (length == 0 && font1 == font0)
 			offset_map[n] = string - string0;
 
+		offset = n;
 		if (font0 == NOT_AVAILABLE)
 			code = rufl_process_not_available(action, s, n,
 					font_size, &x, y, flags,
@@ -270,11 +271,12 @@ rufl_code rufl_process(rufl_action action,
 					font_size, slant, &x, y, flags,
 					click_x, &offset, callback, context);
 
+		if (code != rufl_OK)
+			return code;
+
 		if ((action == rufl_X_TO_OFFSET || action == rufl_SPLIT) &&
 				(offset < n || click_x < x))
 			break;
-		if (code != rufl_OK)
-			return code;
 
 	} while (!(length == 0 && font1 == font0));
 
