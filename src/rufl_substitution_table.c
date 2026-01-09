@@ -505,10 +505,9 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 	/* Shrink the table to its final size. If this fails, leave
 	 * the existing data intact as it's correct -- we just have
 	 * twice the storage usage we need. */
-	subst_table->table = realloc(t64,
-			range * sizeof(*subst_table->table));
-	if (!subst_table->table)
-		subst_table->table = (uint32_t *) t64;
+	table = realloc(t64, range * sizeof(*subst_table->table));
+	if (table)
+		subst_table->table = (uint32_t *) table;
 
 	*substitution_table = &subst_table->base;
 
