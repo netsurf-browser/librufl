@@ -780,7 +780,7 @@ static rufl_code direct(uint64_t *table, size_t table_entries,
 	size_t blocks_needed, table_size;
 	unsigned int i, block;
 
-	subst_table = calloc(sizeof(*subst_table), 1);
+	subst_table = calloc(1, sizeof(*subst_table));
 	if (!subst_table)
 		return rufl_OUT_OF_MEMORY;
 
