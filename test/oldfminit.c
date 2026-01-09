@@ -246,7 +246,7 @@ int main(int argc, const char **argv)
 	ptmp = mkdtemp(template);
 	assert(NULL != ptmp);
 	atexit(cleanup);
-	chdir(ptmp);
+	assert(0 == chdir(ptmp));
 
 	rufl_test_harness_init(339, false, true);
 
