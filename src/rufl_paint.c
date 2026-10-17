@@ -172,7 +172,7 @@ rufl_code rufl_process(rufl_action action,
 	size_t offset_map[rufl_PROCESS_CHUNK];
 	unsigned int slant;
 	const uint8_t *string = string0;
-	struct rufl_character_set *charset;
+	struct rufl_character_set *charset, *charset0;
 	rufl_code code;
 
 	assert(action == rufl_PAINT ||
@@ -230,11 +230,17 @@ rufl_code rufl_process(rufl_action action,
 		font1 = font;
 	else
 		font1 = rufl_substitution_table_lookup(u);
+		code = rufl_optimise_style(&font1, font_style, u);
+		if (code != rufl_OK)
+			return code;
+
 	do {
 		s[0] = u;
 		offset_map[0] = offset_u;
 		n = 1;
 		font0 = font1;
+		if (font0 != NOT_AVAILABLE)
+			charset0 = rufl_font_list[font0].charset;
 		/* invariant: s[0..n) is in font font0 */
 		while (0 < length && n < rufl_PROCESS_CHUNK && font1 == font0) {
 			offset_u = string - string0;
@@ -245,8 +251,15 @@ rufl_code rufl_process(rufl_action action,
 				font1 = NOT_AVAILABLE;
 			else if (charset && rufl_character_set_test(charset, u))
 				font1 = font;
-			else
+			else if (font0 == NOT_AVAILABLE || font0 == font ||
+					!rufl_character_set_test(charset0, u))
+			{
 				font1 = rufl_substitution_table_lookup(u);
+				code = rufl_optimise_style(&font1,
+						font_style, u);
+				if (code != rufl_OK)
+					return code;
+			}
 			if (font1 == font0)
 				n++;
 		}

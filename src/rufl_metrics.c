@@ -144,6 +144,11 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 		font1 = rufl_substitution_table_lookup(u);
 		if (font1 == NOT_AVAILABLE)
 			font1 = rufl_CACHE_CORPUS;
+		else {
+			code = rufl_optimise_style(&font1, font_style, u);
+			if (code != rufl_OK)
+				return code;
+		}
 	}
 
 	/* Old font managers need the font encoding, too */

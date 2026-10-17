@@ -18,6 +18,22 @@ static int rufl_family_list_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_place_in_cache(unsigned int font, unsigned int font_size,
 		const char *encoding, font_f f);
 
+
+/**
+ * Check the proposed weight in the family table, and return font number if
+ * suitable, prefering the font with matching slant.
+ */
+unsigned int rufl_check_used_weight(struct rufl_family_map_entry *e,
+		int used_weight, int slant)
+{
+	if (used_weight < 0 || used_weight > 8)
+		return NO_FONT;
+	if (e->font[used_weight][slant] != NO_FONT)
+		return e->font[used_weight][slant];
+	return e->font[used_weight][1 - slant];
+}
+
+
 /**
  * Find a font family.
  */
@@ -27,8 +43,8 @@ rufl_code rufl_find_font_family(const char *font_family,
 {
 	const char **family;
 	unsigned int f;
-	unsigned int weight, slant, used_weight;
-	unsigned int search_direction;
+	int weight, slant, used_weight;
+	int search_direction, diff;
 
 	family = bsearch(font_family, rufl_family_list,
 			rufl_family_list_entries,
@@ -43,33 +59,30 @@ rufl_code rufl_find_font_family(const char *font_family,
 	struct rufl_family_map_entry *e =
 			&rufl_family_map[family - rufl_family_list];
 	used_weight = weight;
+
+	/* below Regular weight, favour lighter weights first */
 	if (weight <= 2)
 		search_direction = -1;
 	else
 		search_direction = +1;
+
+	diff = 0;
 	while (1) {
-		if (e->font[used_weight][slant] != NO_FONT) {
-			/* the weight and slant is available */
-			f = e->font[used_weight][slant];
+		/* look alternately in each direction for closest weight */
+		used_weight = weight + search_direction * diff;
+		f = rufl_check_used_weight(e, used_weight, slant);
+		if ( f != NO_FONT )
 			break;
+
+		if ( diff ) {
+			/* check opposite direction */
+			used_weight = weight - search_direction * diff;
+			f = rufl_check_used_weight(e, used_weight, slant);
+			if ( f != NO_FONT )
+				break;
 		}
-		if (e->font[used_weight][1 - slant] != NO_FONT) {
-			/* slanted, and non-slanted weight exists, or vv. */
-			f = e->font[used_weight][1 - slant];
-			break;
-		}
-		if (used_weight == 0) {
-			/* searched down without finding a weight: search up */
-			used_weight = weight + 1;
-			search_direction = +1;
-		} else if (used_weight == 8) {
-			/* searched up without finding a weight: search down */
-			used_weight = weight - 1;
-			search_direction = -1;
-		} else {
-			/* try the next weight in the current direction */
-			used_weight += search_direction;
-		}
+
+		diff++;
 	}
 
 	if (font)
