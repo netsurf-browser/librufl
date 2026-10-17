@@ -876,24 +876,61 @@ static size_t rufl_substitution_table_estimate_size_direct(size_t table_entries,
 static void fill_map_for_block(const struct rufl_character_set **charsets,
 		uint32_t block, uint16_t map_for_block[256])
 {
-	unsigned int i, u;
+	unsigned int i, u, v;
+	/* Records the maximum number of characters sourced from a single
+	   font for each sub-block of 16 characters. */
+	char sub_block_count[16];
+
+	memset(sub_block_count, 0, sizeof(sub_block_count));
 
 	for (i = 0; i != rufl_font_list_entries; i++) {
 		if (!charsets[i])
 			continue;
 
 		if (charsets[i]->index[block] == BLOCK_FULL) {
+			/* If this font covers the whole block, use it in
+			   preference to bits of several different fonts. */
 			for (u = 0; u != 256; u++)
-				if (map_for_block[u] == NOT_AVAILABLE)
-					map_for_block[u] = i;
+				map_for_block[u] = i;
+			return;
 		} else if (charsets[i]->index[block] != BLOCK_EMPTY) {
 			const uint8_t *blk = charsets[i]->block[
 					charsets[i]->index[block]];
-			for (u = 0; u != 256; u++) {
-				if (map_for_block[u] == NOT_AVAILABLE &&
-						(blk[(u>>3)] & (1 << (u&7)))) {
-					map_for_block[u] = i;
+			for (u = 0; u != 256; u+=16) {
+				/* Counts characters found in this font. */
+				unsigned int n = 0;
+
+				/* First substitute only where needed. */
+				for (v = 0; v != 16; v++) {
+					if (blk[(v>>3)] & (1 << (v&7))) {
+						n++;
+						if (map_for_block[u+v] ==
+							NOT_AVAILABLE) {
+							map_for_block[u+v] = i;
+						}
+					}
 				}
+
+				/* If the font is most complete for this
+				   sub-block, overwrite any previous
+				   substitutions (unless we had none). */
+				if (sub_block_count[u>>4] &&
+						sub_block_count[u>>4] < n) {
+					for (v = 0; v != 16; v++) {
+						if (blk[(v>>3)] & (1 << (v&7))) {
+							map_for_block[u+v] = i;
+						}
+					}
+					sub_block_count[u>>4] = n;
+				}
+
+				/* If we had no substitutions up to now,
+				   record the count for this font. */
+				if (!sub_block_count[u>>4])
+					sub_block_count[u>>4] = n;
+
+				/* Advance to next sub-block. */
+				blk += 2;
 			}
 		}
 	}
