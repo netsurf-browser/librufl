@@ -199,6 +199,8 @@ rufl_code rufl_find_font(unsigned int font, unsigned int font_size,
 		const char *encoding, font_f *fhandle);
 bool rufl_character_set_test(const struct rufl_character_set *charset,
 		uint32_t u);
+rufl_code rufl_optimise_style(unsigned int *font, rufl_style font_style,
+		unsigned int u);
 
 rufl_code rufl_substitution_table_init(void);
 void rufl_substitution_table_fini(void);
