@@ -228,11 +228,12 @@ rufl_code rufl_process(rufl_action action,
 		font1 = NOT_AVAILABLE;
 	else if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
-	else
+	else {
 		font1 = rufl_substitution_table_lookup(u);
 		code = rufl_optimise_style(&font1, font_style, u);
 		if (code != rufl_OK)
 			return code;
+	}
 
 	do {
 		s[0] = u;
