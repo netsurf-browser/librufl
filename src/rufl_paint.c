@@ -15,8 +15,17 @@
 
 
 typedef enum { rufl_PAINT, rufl_WIDTH, rufl_X_TO_OFFSET,
-		rufl_SPLIT, rufl_PAINT_CALLBACK, rufl_FONT_BBOX } rufl_action;
+		rufl_SPLIT, rufl_PAINT_CALLBACK, rufl_FONT_BBOX,
+		rufl_STRING_BBOX } rufl_action;
 #define rufl_PROCESS_CHUNK 200
+
+/* for building full string bounding box during rufl_process */
+struct rufl_string_bbox_context {
+	/** bounding box so far */
+	os_box bbox;
+	/** amount to deduct from x1 if another span follows */
+	int overhang;
+};
 
 bool rufl_can_background_blend = false;
 
@@ -151,6 +160,22 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 
 
 /**
+ * Determine the bounding box of Unicode text.
+ */
+
+rufl_code rufl_string_bbox(const char *font_family, rufl_style font_style,
+		unsigned int font_size,
+		const char *string, size_t length,
+		os_box *bbox)
+{
+	return rufl_process(rufl_STRING_BBOX,
+			font_family, font_style, font_size,
+			(const uint8_t *) string, length,
+			0, 0, 0, (int *) bbox, 0, 0, 0, 0, 0);
+}
+
+
+/**
  * Render, measure, or split Unicode text.
  */
 
@@ -174,6 +199,8 @@ rufl_code rufl_process(rufl_action action,
 	const uint8_t *string = string0;
 	struct rufl_character_set *charset;
 	rufl_code code;
+	struct rufl_string_bbox_context bbox_context;
+	int *xptr = &x;
 
 	assert(action == rufl_PAINT ||
 			(action == rufl_WIDTH && width) ||
@@ -182,7 +209,8 @@ rufl_code rufl_process(rufl_action action,
 			(action == rufl_SPLIT && char_offset &&
 					actual_x) ||
 			(action == rufl_PAINT_CALLBACK && callback) ||
-			(action == rufl_FONT_BBOX && width));
+			(action == rufl_FONT_BBOX && width) ||
+			(action == rufl_STRING_BBOX && width));
 
 	if ((flags & rufl_BLEND_FONT) && !rufl_can_background_blend) {
 		/* unsuitable FM => clear blending bit */
@@ -195,6 +223,13 @@ rufl_code rufl_process(rufl_action action,
 		else if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
 			*char_offset = 0;
 			*actual_x = 0;
+		}
+		else if (action == rufl_STRING_BBOX) {
+			os_box *bbox = (os_box *) width;
+			bbox->x0 = 0;
+			bbox->y0 = 0;
+			bbox->x1 = 0;
+			bbox->y1 = 0;
 		}
 		return rufl_OK;
 	}
@@ -220,6 +255,15 @@ rufl_code rufl_process(rufl_action action,
 					font_size, slant, width, 0, 0,
 					0, 0, 0, 0);
 		return code;
+	}
+
+	if (action == rufl_STRING_BBOX) {
+		bbox_context.bbox.x0 = 0;
+		bbox_context.bbox.y0 = 0x7FFFFFFF;
+		bbox_context.bbox.x1 = 0;
+		bbox_context.bbox.y1 = 0;
+		bbox_context.overhang = 0;
+		xptr = (int*) &bbox_context;
 	}
 
 	offset_u = 0;
@@ -260,15 +304,15 @@ rufl_code rufl_process(rufl_action action,
 		offset = n;
 		if (font0 == NOT_AVAILABLE)
 			code = rufl_process_not_available(action, s, n,
-					font_size, &x, y, flags,
+					font_size, xptr, y, flags,
 					click_x, &offset, callback, context);
 		else if (rufl_old_font_manager)
 			code = rufl_process_span_old(action, s, n, font0,
-					font_size, slant, &x, y, flags,
+					font_size, slant, xptr, y, flags,
 					click_x, &offset, callback, context);
 		else
 			code = rufl_process_span(action, s, n, font0,
-					font_size, slant, &x, y, flags,
+					font_size, slant, xptr, y, flags,
 					click_x, &offset, callback, context);
 
 		if (code != rufl_OK)
@@ -285,6 +329,13 @@ rufl_code rufl_process(rufl_action action,
 	else if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
 		*char_offset = offset_map[offset];
 		*actual_x = x;
+	}
+	else if (action == rufl_STRING_BBOX) {
+		os_box *bbox = (os_box*) width;
+		bbox->x0 = bbox_context.bbox.x0;
+		bbox->x1 = bbox_context.bbox.x1;
+		bbox->y0 = bbox_context.bbox.y0;
+		bbox->y1 = bbox_context.bbox.y1;
 	}
 
 	return rufl_OK;
@@ -358,9 +409,27 @@ rufl_code rufl_process_span(rufl_action action,
 						font_RETURN_CARET_POS : 0),
 				(click_x - *x) * 400, 0x7fffffff, 0, 0,
 				n * 4,
-				(char **)(void *)&split_point, 
+				(char **)(void *)&split_point,
 				&x_out, &y_out, 0);
 		*offset = split_point - s;
+	} else if (action == rufl_STRING_BBOX) {
+		struct rufl_string_bbox_context *context
+				= (struct rufl_string_bbox_context*) x;
+		font_scan_block block = { {0, 0}, {0, 0}, -1 };
+		rufl_fm_error = xfont_scan_string(f, (const char *) s,
+				font_GIVEN_BLOCK | font_GIVEN_LENGTH |
+				font_GIVEN_FONT | font_KERN |
+				font_GIVEN32_BIT | font_RETURN_BBOX,
+				0x7fffffff, 0x7fffffff, &block, 0, n * 4,
+				0, &x_out, 0, 0);
+		if (!context->bbox.x1)
+			context->bbox.x0 = block.bbox.x0;
+		context->bbox.x1 += block.bbox.x1 - context->overhang;
+		context->overhang = block.bbox.x1 - 400 * (x_out/400);
+		if (context->bbox.y0 > block.bbox.y0)
+			context->bbox.y0 = block.bbox.y0;
+		if (context->bbox.y1 < block.bbox.y1)
+			context->bbox.y1 = block.bbox.y1;
 	} else {
 		rufl_fm_error = xfont_scan_string(f, (const char *) s,
 				font_GIVEN_LENGTH | font_GIVEN_FONT |
@@ -374,7 +443,8 @@ rufl_code rufl_process_span(rufl_action action,
 				rufl_fm_error->errmess);
 		return rufl_FONT_MANAGER_ERROR;
 	}
-	*x += x_out / 400;
+	if (action != rufl_STRING_BBOX)
+		*x += x_out / 400;
 
 	return rufl_OK;
 }
@@ -461,8 +531,8 @@ rufl_code rufl_process_span_old(rufl_action action,
 
 		if (action == rufl_PAINT) {
 			/* paint span */
-			/* call Font_SetFont to work around broken PS printer 
-			 * driver, which doesn't use the font handle from 
+			/* call Font_SetFont to work around broken PS printer
+			 * driver, which doesn't use the font handle from
 			 * Font_Paint */
 			rufl_fm_error = xfont_set_font(f);
 			if (rufl_fm_error) {
@@ -497,7 +567,7 @@ rufl_code rufl_process_span_old(rufl_action action,
 				snprintf(font_name, sizeof font_name, "%s",
 					rufl_font_list[font].identifier);
 
-			callback(context, font_name, font_size, 
+			callback(context, font_name, font_size,
 					s2, 0, i, *x, y);
 		}
 
@@ -508,13 +578,31 @@ rufl_code rufl_process_span_old(rufl_action action,
 					font_KERN |
 					((action == rufl_X_TO_OFFSET) ?
 						font_RETURN_CARET_POS : 0),
-					(click_x - *x) * 400, 0x7fffffff, 
+					(click_x - *x) * 400, 0x7fffffff,
 					0, 0, i,
 					&split_point, &x_out, &y_out, 0);
 			*offset += split_point - (char *) s2;
+		} else if (action == rufl_STRING_BBOX) {
+			struct rufl_string_bbox_context *context
+				= (struct rufl_string_bbox_context*) x;
+			font_scan_block block = { {0, 0}, {0, 0}, -1 };
+			rufl_fm_error = xfont_scan_string(f, (char *) s2,
+					font_GIVEN_BLOCK | font_GIVEN_LENGTH |
+					font_GIVEN_FONT | font_KERN |
+					font_RETURN_BBOX,
+					0x7fffffff, 0x7fffffff, &block, 0, i,
+					0, &x_out, 0, 0);
+			if (!context->bbox.x1)
+				context->bbox.x0 = block.bbox.x0;
+			context->bbox.x1 += block.bbox.x1 - context->overhang;
+			context->overhang = block.bbox.x1 - 400 * (x_out/400);
+			if (context->bbox.y0 > block.bbox.y0)
+				context->bbox.y0 = block.bbox.y0;
+			if (context->bbox.y1 < block.bbox.y1)
+				context->bbox.y1 = block.bbox.y1;
 		} else {
 			rufl_fm_error = xfont_scan_string(f, (char *) s2,
-					font_GIVEN_LENGTH | font_GIVEN_FONT | 
+					font_GIVEN_LENGTH | font_GIVEN_FONT |
 					font_KERN,
 					0x7fffffff, 0x7fffffff, 0, 0, i,
 					0, &x_out, &y_out, 0);
@@ -525,7 +613,8 @@ rufl_code rufl_process_span_old(rufl_action action,
 					rufl_fm_error->errmess);
 			return rufl_FONT_MANAGER_ERROR;
 		}
-		*x += x_out / 400;
+		if (action != rufl_STRING_BBOX)
+			*x += x_out / 400;
 
 		/* Now update s and n for the next chunk */
 		s += i;
@@ -570,6 +659,19 @@ rufl_code rufl_process_not_available(rufl_action action,
 	if (action == rufl_WIDTH) {
 		for (i = 0; i != n; i++)
 			*x += (s[i] < 0x10000) ? dx : dx3;
+		return rufl_OK;
+	} else if (action == rufl_STRING_BBOX) {
+		struct rufl_string_bbox_context *context
+			= (struct rufl_string_bbox_context*) x;
+		context->bbox.x1 -= context->overhang;
+		context->overhang = 0;
+		for (i = 0; i != n; i++)
+			context->bbox.x1 += 400 *
+					((s[i] < 0x10000) ? dx : dx3);
+		if (context->bbox.y0 > 0)
+			context->bbox.y0 = 0;
+		if (context->bbox.y1 < 8 * font_size / 64)
+			context->bbox.y0 = 8 * font_size / 64;
 		return rufl_OK;
 	} else if (action == rufl_X_TO_OFFSET || action == rufl_SPLIT) {
 		int width = 0;
