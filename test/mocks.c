@@ -54,7 +54,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	char name[80], encoding[80];
 	const char *slash;
 	size_t ni, ei;
-	int fh;
+	int fh, first_free_fh = 256;
 
 	/* Default xres and yres */
 	if (xres <= 0)
@@ -107,15 +107,16 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 				h->fonts[fh].xsize == xsize &&
 				h->fonts[fh].ysize == ysize &&
 				h->fonts[fh].xres == xres &&
-				h->fonts[fh].yres == yres)
+				h->fonts[fh].yres == yres) {
 			break;
+		}
+		if (h->fonts[fh].refcnt == 0 && fh < first_free_fh) {
+			first_free_fh = fh;
+		}
 	}
 	if (fh == 256) {
 		/* No existing font found: allocate new one */
-		for (fh = 1; fh < 256; fh++) {
-			if (h->fonts[fh].refcnt == 0)
-				break;
-		}
+		fh = first_free_fh;
 		if (fh == 256) {
 			return &font_no_handles;
 		}
