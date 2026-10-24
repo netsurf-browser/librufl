@@ -19,6 +19,16 @@ typedef struct {
 } rufl_test_harness_sized_font;
 
 typedef struct {
+	int codepoint; /* UCS codepoint */
+	int index; /* Glyph index (or -1 for unmapped) */
+} rufl_test_harness_glyph_map_entry;
+
+typedef struct {
+	size_t n_entries;
+	rufl_test_harness_glyph_map_entry entries[];
+} rufl_test_harness_glyph_map;
+
+typedef struct {
 	int fm_version;
 	bool fm_ucs;
 	bool fm_broken_fec;
@@ -31,6 +41,9 @@ typedef struct {
 
 	/* n_font_names * (n_encodings + 1) entries */
 	char **encoding_filenames;
+
+	/* n_font_names entries */
+	rufl_test_harness_glyph_map **glyph_maps;
 
 	/* At most 256 active font handles */
 	rufl_test_harness_sized_font fonts[256];

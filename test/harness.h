@@ -6,5 +6,7 @@ void rufl_test_harness_register_font(const char *name);
 void rufl_test_harness_register_encoding(const char *encoding);
 void rufl_test_harness_set_font_encoding(const char *fontname,
 		const char *encoding, const char *path);
+void rufl_test_harness_set_font_glyph_map(const char *fontname,
+		const char *path);
 
 #endif

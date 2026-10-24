@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,6 +11,12 @@ static void rufl_test_harness_free(void)
 {
 	size_t ni, ei;
 
+	if (h->glyph_maps != NULL) {
+		for (ni = 0; ni != h->n_font_names; ni++) {
+			free(h->glyph_maps[ni]);
+		}
+	}
+	free(h->glyph_maps);
 	free(h->font_names);
 	free(h->encodings);
 	if (h->encoding_filenames != NULL) {
@@ -137,3 +144,157 @@ void rufl_test_harness_set_font_encoding(const char *fontname,
 	h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei] = strdup(path);
 	assert(h->encoding_filenames[(ni * (h->n_encodings + 1)) + ei] != NULL);
 }
+
+
+#define GM_CHUNK 256
+static int fromhex(char val)
+{
+	if ('0' <= val && val <= '9')
+		return val - '0';
+	else if ('A' <= val && val <= 'F')
+		return val - 'A' + 10;
+	else if ('a' <= val && val <= 'f')
+		return val - 'a' + 10;
+	assert(0);
+	return -1;
+}
+
+static rufl_test_harness_glyph_map *parse_gm_line(
+		rufl_test_harness_glyph_map *map, const char *line,
+		size_t len)
+{
+	const char *p;
+	size_t chunks;
+	int index = 0, num = 1, codepoint = 0;
+
+	/* The glyph map is a sparse encoding from glyph index -> codepoint
+	 * ordered by glyph index and with contiguous range support for
+	 * simple inputs:
+	 *
+	 *   0001:0020    # Single glyph
+	 *   0002+8:0022  # 8 contiguous glyphs at indices 2-9; U+0022-U+0029
+	 *   !:0030       # U+0030 is explicitly unmapped
+	 */
+
+	if (len == 0)
+		return map;
+
+	if (*line == '!') {
+		index = -1;
+		for (p = line + 2; p < line + len; p++) {
+			codepoint = (codepoint << 4) | fromhex(*p);
+		}
+	} else {
+		for (p = line; p < line + len; p++) {
+			if (*p == ':') {
+				assert(codepoint != 0);
+				if (index == 0) {
+					index = codepoint;
+				} else {
+					num = codepoint;
+				}
+				codepoint = 0;
+			} else if (*p == '+') {
+				assert(codepoint != 0);
+				index = codepoint;
+				codepoint = 0;
+			} else {
+				codepoint = (codepoint << 4) | fromhex(*p);
+			}
+		}
+	}
+
+	chunks = (map->n_entries + num + GM_CHUNK - 1) & ~(GM_CHUNK - 1);
+	if (chunks != ((map->n_entries + GM_CHUNK - 1) & ~(GM_CHUNK - 1))) {
+		rufl_test_harness_glyph_map *tmp;
+		tmp = realloc(map, sizeof(*map) +
+				(chunks + GM_CHUNK) *
+				sizeof(rufl_test_harness_glyph_map_entry));
+		assert(tmp != NULL);
+		map = tmp;
+	}
+
+	while (num-- > 0) {
+		assert(0 < codepoint && codepoint <= 0x10ffff);
+		map->entries[map->n_entries].codepoint = codepoint;
+		map->entries[map->n_entries].index = index;
+		map->n_entries += 1;
+		index += 1;
+		codepoint += 1;
+	}
+
+	return map;
+}
+
+static int glyph_map_cmp(const void *z1, const void *z2)
+{
+	const rufl_test_harness_glyph_map_entry *entry1 = z1;
+	const rufl_test_harness_glyph_map_entry *entry2 = z2;
+	if (entry1->codepoint < entry2->codepoint)
+		return -1;
+	else if (entry2->codepoint < entry1->codepoint)
+		return 1;
+	return 0;
+}
+
+void rufl_test_harness_set_font_glyph_map(const char *fontname,
+		const char *path)
+{
+	rufl_test_harness_glyph_map *map;
+	FILE *fp;
+	char *buf;
+	const char *p, *end, *l;
+	size_t len, read;
+	size_t ni;
+
+	if (h->glyph_maps == NULL) {
+		h->glyph_maps = calloc(h->n_font_names, sizeof(*h->glyph_maps));
+		assert(h->glyph_maps != NULL);
+	}
+
+	map = calloc(1, sizeof(*map) +
+			GM_CHUNK * sizeof(rufl_test_harness_glyph_map_entry));
+	assert(map != NULL);
+
+	/* Find font index */
+	for (ni = 0; ni < h->n_font_names; ni++) {
+		if (strcmp(h->font_names[ni], fontname) == 0)
+			break;
+	}
+	assert(ni != h->n_font_names);
+
+	fp = fopen(path, "r");
+	assert(fp != NULL);
+
+	fseek(fp, 0, SEEK_END);
+	len = (size_t) ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	buf = malloc(len);
+	assert(buf != NULL);
+
+	read = fread(buf, 1, len, fp);
+	assert(read == len);
+
+	fclose(fp);
+
+	p = l = buf;
+	end = buf + read;
+	while (p < end) {
+		if (*p == '\n') {
+			map = parse_gm_line(map, l, p-l);
+			l = p+1;
+		}
+		p++;
+	}
+
+	free(buf);
+
+	/* Sort the glyph map by codepoint */
+	qsort(map->entries, map->n_entries, sizeof(map->entries[0]),
+				glyph_map_cmp);
+
+
+	h->glyph_maps[ni] = map;
+}
+#undef GM_CHUNK

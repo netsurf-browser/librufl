@@ -454,8 +454,21 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	static int extchars[] = { 0x20, 0x21, 0x30, 0x31, 0x32, 0xa0, 0x10ac0, 0x20021, 0x30000, -1 };
-	static int intchars[] = {    1,    2,    3,    4,   -1,    5,       6,       7,       8 };
+	static const rufl_test_harness_glyph_map default_glyph_map = {
+		9,
+		{
+			{ 0x20, 1 },
+			{ 0x21, 2 },
+			{ 0x30, 3 },
+			{ 0x31, 4 },
+			{ 0x32, -1 },
+			{ 0xa0, 5 },
+			{ 0x10ac0, 6 },
+			{ 0x20021, 7 },
+			{ 0x30000, 8 },
+		},
+	};
+	const rufl_test_harness_glyph_map *gm;
 	size_t index = 0;
 	int next = -1, internal = -1;
 
@@ -469,27 +482,40 @@ os_error *xfont_enumerate_characters (font_f font, int character,
 	if (h->fonts[font].refcnt == 0)
 		return &font_no_font;
 
-	/* Broken FEC: skip first chunk unless code is valid.
-	 * (only 0x20 and 0x21 are valid in the first chunk here,
-	 * so we simply need to skip over these if the code is
-	 * less than 0x20 -- any other codes in the first chunk
-	 * will just fall out of the usual "next code" logic)
-	 */
-	if (h->fm_broken_fec && character < extchars[0])
-		index = 2;
+	if (h->glyph_maps == NULL ||
+			h->glyph_maps[h->fonts[font].name] == NULL) {
+		gm = &default_glyph_map;
+	} else {
+		gm = h->glyph_maps[h->fonts[font].name];
+	}
 
-	for (; index < (sizeof(intchars)/sizeof(intchars[0])); index++) {
-		if (extchars[index] == character) {
-			/* Found: return it and compute next */
-			next = extchars[index+1];
-			internal = intchars[index];
+	/* Broken FEC: skip first chunk unless code is valid.
+	 * Chunks are 16 codepoints wide, and the first one
+	 * begins at 0x20, so skip over all of its entries if
+	 * the input character is less than 0x20.
+	 */
+	if (h->fm_broken_fec && character < 0x20) {
+		while (index < gm->n_entries &&
+				gm->entries[index].codepoint < 0x30) {
+			index++;
+		}
+	}
+
+	for (; index < gm->n_entries; index++) {
+		if (gm->entries[index].codepoint == character) {
+			/* Found: capture and advance */
+			internal = gm->entries[index].index;
+			index++;
 			break;
-		} else if (extchars[index] > character) {
-			/* Not found and won't be: compute next */
-			next = extchars[index];
-			internal = -1;
+		} else if (gm->entries[index].codepoint > character) {
+			/* Not found and won't be: give up */
 			break;
 		}
+	}
+
+	/* Compute next codepoint, if there is one */
+	if (index < gm->n_entries) {
+		next = gm->entries[index].codepoint;
 	}
 
 	if (next_character != NULL)
