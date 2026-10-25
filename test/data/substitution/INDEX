@@ -1,0 +1,5 @@
+# Index file for font substitution tests
+#
+# Test			Description
+ucsbasic.cfg		Simple substitution with UCS font manager
+oldbasic.cfg		Simple substitution with non-UCS font manager

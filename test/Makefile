@@ -10,7 +10,8 @@ else
 	oldfminit:oldfminit.c;harness.c;mocks.c \
 	olducsinit:olducsinit.c;harness.c;mocks.c \
 	ucsinit:ucsinit.c;harness.c;mocks.c \
-	manyfonts:manyfonts.c;harness.c;mocks.c
+	manyfonts:manyfonts.c;harness.c;mocks.c \
+	substitution:substitution.c;harness.c;mocks.c
 endif
 
 include $(NSBUILD)/Makefile.subdir
