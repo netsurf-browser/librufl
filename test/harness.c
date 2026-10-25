@@ -101,17 +101,24 @@ void rufl_test_harness_register_font(const char *name)
 void rufl_test_harness_register_encoding(const char *encoding)
 {
 	const char **encodings;
+	size_t i;
 
 	/* Encoding paths must be registered last */
 	assert(h->encoding_filenames == NULL);
 
-	encodings = realloc(h->encodings,
-			(h->n_encodings + 1) * sizeof(*encodings));
-	assert(encodings != NULL);
+	for (i = 0; i < h->n_encodings; i++) {
+		if (strcmp(h->encodings[i], encoding) == 0)
+			break;
+	}
+	if (i == h->n_encodings) {
+		encodings = realloc(h->encodings,
+				(h->n_encodings + 1) * sizeof(*encodings));
+		assert(encodings != NULL);
 
-	h->encodings = encodings;
+		h->encodings = encodings;
 
-	h->encodings[h->n_encodings++] = encoding;
+		h->encodings[h->n_encodings++] = encoding;
+	}
 }
 
 void rufl_test_harness_set_font_encoding(const char *fontname,
