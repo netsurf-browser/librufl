@@ -15,12 +15,7 @@ static void rufl_test_harness_free(void)
 {
 	size_t ni, ei;
 
-	while (h->paint_calls != NULL) {
-		rufl_test_harness_paint_call_internal *next;
-		next = h->paint_calls->next;
-		free(h->paint_calls);
-		h->paint_calls = next;
-	}
+	rufl_test_harness_discard_paint_calls();
 	if (h->glyph_maps != NULL) {
 		for (ni = 0; ni != h->n_font_names; ni++) {
 			free(h->glyph_maps[ni]);
@@ -464,4 +459,15 @@ void rufl_test_harness_assert_paint_calls(const char *fontname, ...)
 	/* Expect to have reached the end of the calls queue */
 	call = rufl_test_harness_paint_enumerate(call);
 	assert(call == NULL);
+}
+
+void rufl_test_harness_discard_paint_calls(void)
+{
+	while (h->paint_calls != NULL) {
+		rufl_test_harness_paint_call_internal *next;
+		next = h->paint_calls->next;
+		free(h->paint_calls);
+		h->paint_calls = next;
+	}
+	h->last_paint_call = NULL;
 }
