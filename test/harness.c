@@ -1,7 +1,11 @@
 #include <assert.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <arpa/inet.h>
 
 #include "harness-priv.h"
 
@@ -11,6 +15,12 @@ static void rufl_test_harness_free(void)
 {
 	size_t ni, ei;
 
+	while (h->paint_calls != NULL) {
+		rufl_test_harness_paint_call_internal *next;
+		next = h->paint_calls->next;
+		free(h->paint_calls);
+		h->paint_calls = next;
+	}
 	if (h->glyph_maps != NULL) {
 		for (ni = 0; ni != h->n_font_names; ni++) {
 			free(h->glyph_maps[ni]);
@@ -298,3 +308,160 @@ void rufl_test_harness_set_font_glyph_map(const char *fontname,
 	h->glyph_maps[ni] = map;
 }
 #undef GM_CHUNK
+
+const rufl_test_harness_paint_call *rufl_test_harness_paint_enumerate(
+		const rufl_test_harness_paint_call *current)
+{
+	rufl_test_harness_paint_call_internal *icall;
+
+	if (h->paint_calls == NULL)
+		return NULL;
+
+	if (current == NULL) {
+		icall = h->paint_calls;
+	} else {
+		icall = (rufl_test_harness_paint_call_internal *) (
+				((const uint8_t *)((const void *) current)) -
+				offsetof(rufl_test_harness_paint_call_internal,
+				pub));
+		icall = icall->next;
+	}
+
+	if (icall == NULL)
+		return NULL;
+
+	icall->pub.font.name = h->font_names[icall->name];
+	/* Symbol fonts have no encoding */
+	if (icall->encoding < h->n_encodings) {
+		icall->pub.font.encoding = h->encodings[icall->encoding];
+	} else {
+		icall->pub.font.encoding = NULL;
+	}
+	return &icall->pub;
+}
+
+void rufl_test_harness_assert_paint_call(
+		const rufl_test_harness_paint_call *call,
+		const rufl_test_harness_paint_call *exp,
+		const char *text)
+{
+	uint32_t ucs4 = 0;
+	char *buf, *outp, *p, *end;
+
+	assert(call != NULL);
+	assert(exp != NULL);
+	assert(text != NULL);
+
+	/* First, assert that all the non-text parameters match */
+	assert(call->trfm == exp->trfm);
+	assert(call->ucs4 == exp->ucs4);
+	assert(call->xpos == exp->xpos);
+	assert(call->ypos == exp->ypos);
+	assert(call->font.xsize == exp->font.xsize);
+	assert(call->font.ysize == exp->font.ysize);
+	assert(call->font.xres == exp->font.xres);
+	assert(call->font.yres == exp->font.yres);
+	assert(strcmp(call->font.name, exp->font.name) == 0);
+	assert((call->font.encoding == NULL && exp->font.encoding == NULL) ||
+			strcmp(call->font.encoding, exp->font.encoding) == 0);
+
+	/* Now match the text data */
+	if (call->ucs4 == false) {
+		/* Simple case: everything is 8 bit */
+		assert(call->len == exp->len);
+		assert(memcmp(call->data, text, exp->len) == 0);
+		return;
+	}
+
+	/* UCS4: convert to UTF-8 so that string constants can be used
+	 * without difficulty. As the conversion is deterministic, it's
+	 * semantically equivalent. */
+	p = end = outp = buf = malloc(call->len + 1);
+	assert(buf != NULL);
+
+	/* Read the characters backwards and build the UTF-8 sequences
+	 * backwards, resulting in a reversed UTF-8 byte stream. */
+	for (size_t i = call->len; i > 0; i--) {
+		const char *s = p;
+
+		/* Endian agnostic read: result is always big endian */
+		ucs4 |= call->data[i-1] << (8 * (3 - ((i - 1) & 3)));
+
+		if (((i - 1) & 3) != 0) {
+			/* Still more codepoint to read */
+			continue;
+		}
+
+		ucs4 = ntohl(ucs4); /* Convert codepoint to host endian */
+
+		if (ucs4 < 0x80) {
+			/* ASCII */
+			*p++ = ucs4;
+			ucs4 = 0;
+		}
+
+		/* Convert UCS4 to UTF-8, emitting the bytes in reverse order */
+		while (ucs4 != 0) {
+			/* 6 bits at a time */
+			char c = ucs4 & 0x3f;
+			ucs4 >>= 6;
+
+			/* Inject the prefix */
+			if (ucs4) {
+				/* Continuation: fixed prefix */
+				c |= 0x80;
+			} else {
+				/* Start: sign extend the start bits */
+				c |= (((int8_t)0x80) >> (p - s));
+			}
+			*p++ = c;
+		}
+	}
+	end = p;
+
+	/* Reverse the UTF-8 encoded byte stream */
+	while (p > outp) {
+		char c = *outp;
+		*(outp++) = *(--p);
+		*p = c;
+	}
+
+	assert((size_t) (end - buf) == exp->len);
+	assert(memcmp(buf, text, exp->len) == 0);
+	free(buf);
+}
+
+void rufl_test_harness_assert_paint_calls(const char *fontname, ...)
+{
+	const rufl_test_harness_paint_call *call = NULL;
+	va_list ap;
+
+	va_start(ap, fontname);
+	while (fontname != NULL) {
+		rufl_test_harness_paint_call exp;
+		const char *text;
+
+		exp.font.name = fontname;
+		exp.font.encoding = va_arg(ap, const char *);
+		exp.font.xsize = va_arg(ap, int);
+		exp.font.ysize = exp.font.xsize;
+		/* XXX: This colludes with the xfont_find_font mock */
+		exp.font.xres = exp.font.yres = 90;
+		exp.xpos = va_arg(ap, int);
+		exp.ypos = va_arg(ap, int);
+		exp.ucs4 = va_arg(ap, int);
+		exp.trfm = va_arg(ap, int);
+		text = va_arg(ap, const char *);
+		exp.len = strlen(text);
+
+		call = rufl_test_harness_paint_enumerate(call);
+		rufl_test_harness_assert_paint_call(call, &exp, text);
+
+		fontname = va_arg(ap, const char *); /* Next fontname */
+	}
+	va_end(ap);
+
+	/* Expect to have reached the end of the calls queue */
+	call = rufl_test_harness_paint_enumerate(call);
+	assert(call == NULL);
+}

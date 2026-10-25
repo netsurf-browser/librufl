@@ -28,6 +28,14 @@ typedef struct {
 	rufl_test_harness_glyph_map_entry entries[];
 } rufl_test_harness_glyph_map;
 
+typedef struct rufl_test_harness_paint_call_internal {
+	struct rufl_test_harness_paint_call_internal *next;
+	size_t name;
+	size_t encoding;
+	/* Must be last, as variable length */
+	rufl_test_harness_paint_call pub;
+} rufl_test_harness_paint_call_internal;
+
 typedef struct {
 	int fm_version;
 	bool fm_ucs;
@@ -51,6 +59,9 @@ typedef struct {
 
 	char *buffer;
 	int buffer_flags;
+
+	rufl_test_harness_paint_call_internal *paint_calls;
+	rufl_test_harness_paint_call_internal *last_paint_call;
 } rufl_test_harness_t;
 
 extern rufl_test_harness_t *h;

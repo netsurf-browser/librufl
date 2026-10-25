@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <oslib/font.h>
@@ -334,14 +335,48 @@ os_error *xfont_paint (font_f font, char const *string,
 	if (flags & font_GIVEN_FONT)
 		h->current_font = font;
 
-	//XXX:
-	//XXX: also, pay attention to redirection to buffer
-	(void) string;
-	(void) xpos;
-	(void) ypos;
-	(void) block;
-	(void) trfm;
-	(void) length;
+	/* Demand the inputs RUfl uses and no others */
+	assert((flags & ~(font_OS_UNITS | font_GIVEN_TRFM | font_GIVEN_LENGTH |
+			font_GIVEN_FONT | font_KERN | font_GIVEN32_BIT |
+			font_BLEND_FONT)) == 0);
+	assert((flags & (font_OS_UNITS | font_GIVEN_LENGTH | font_GIVEN_FONT |
+			font_KERN)) == (font_OS_UNITS | font_GIVEN_LENGTH |
+			font_GIVEN_FONT | font_KERN));
+	assert((flags & font_GIVEN_TRFM) == 0 || trfm != NULL);
+	assert((flags & font_GIVEN32_BIT) == 0 || h->fm_ucs);
+	assert(block == NULL);
+
+	if (h->buffer != NULL) {
+		/* Handle redirection to buffer (i.e. emit draw path) */
+		// XXX: implement
+		return NULL;
+	}
+
+	/* Otherwise, just record the call */
+	rufl_test_harness_paint_call_internal *call = malloc(
+			sizeof(rufl_test_harness_paint_call_internal) + length);
+	assert(call != NULL);
+	call->next = NULL;
+	call->name = h->fonts[font].name;
+	call->encoding = h->fonts[font].encoding;
+	call->pub.font.name = NULL;
+	call->pub.font.encoding = NULL;
+	call->pub.font.xsize = h->fonts[font].xsize;
+	call->pub.font.ysize = h->fonts[font].ysize;
+	call->pub.font.xres = h->fonts[font].xres;
+	call->pub.font.yres = h->fonts[font].yres;
+	call->pub.len = length;
+	call->pub.xpos = xpos;
+	call->pub.ypos = ypos;
+	call->pub.ucs4 = (flags & font_GIVEN32_BIT) != 0;
+	call->pub.trfm = (flags & font_GIVEN_TRFM) != 0;
+	memcpy(call->pub.data, string, length);
+	if (h->paint_calls == NULL) {
+		h->paint_calls = h->last_paint_call = call;
+	} else {
+		h->last_paint_call->next = call;
+		h->last_paint_call = call;
+	}
 
 	return NULL;
 }
