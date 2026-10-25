@@ -322,7 +322,7 @@ const rufl_test_harness_paint_call *rufl_test_harness_paint_enumerate(
 	if (current == NULL) {
 		icall = h->paint_calls;
 	} else {
-		icall = (rufl_test_harness_paint_call_internal *) (
+		icall = (rufl_test_harness_paint_call_internal *) (void *) (
 				((const uint8_t *)((const void *) current)) -
 				offsetof(rufl_test_harness_paint_call_internal,
 				pub));
