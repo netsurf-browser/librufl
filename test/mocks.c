@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <arpa/inet.h>
+
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
@@ -416,13 +418,32 @@ os_error *xfont_scan_string (font_f font, char const *s,
 	else if (flags & font_GIVEN16_BIT)
 		advance = 2;
 
+	/* Length must be a multiple of the advance width */
+	assert((length & (advance - 1)) == 0);
+
 	/* Consume up to length bytes of input */
 	while (length > 0) {
 		uint32_t c = 0, i;
 		int cwidth;
+		/* Read bytes as big endian (regardless of host)
+		 * then we can use ntohl to rearrange things.
+		 *
+		 *	advance	i	shift multiple
+		 *	4
+		 *		0	(4-0-1) => 3
+		 *		1	(4-1-1) => 2
+		 *		2	(4-2-1) => 1
+		 *		3	(4-3-1) => 0
+		 *	2
+		 *		0	(2-0-1) => 1
+		 *		1	(2-1-1) => 0
+		 *	1
+		 *		0	(1-0-1) => 0
+		 */
 		for (i = 0; i < advance; i++) {
-			c |= s[i] << (advance - i - 1);
+			c |= ((uint32_t) s[i]) << ((advance - i - 1) * 8);
 		}
+		c = ntohl(c); /* Convert to host endian */
 		s += advance;
 		length -= advance;
 

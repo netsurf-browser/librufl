@@ -380,7 +380,8 @@ void rufl_test_harness_assert_paint_call(
 		const char *s = p;
 
 		/* Endian agnostic read: result is always big endian */
-		ucs4 |= call->data[i-1] << (8 * (3 - ((i - 1) & 3)));
+		ucs4 |= ((uint32_t) call->data[i-1]) <<
+				(8 * (3 - ((i - 1) & 3)));
 
 		if (((i - 1) & 3) != 0) {
 			/* Still more codepoint to read */

@@ -1965,7 +1965,7 @@ void rufl_init_status_open(void)
 			wimp_COLOUR_VERY_LIGHT_GREY <<wimp_ICON_BG_COLOUR_SHIFT,
 			{ "" } },
 			{ { 16, -112, 16, -68 }, wimp_ICON_FILLED |
-			wimp_COLOUR_ORANGE << wimp_ICON_BG_COLOUR_SHIFT,
+			((unsigned) wimp_COLOUR_ORANGE) << wimp_ICON_BG_COLOUR_SHIFT,
 			{ "" } },
 			{ { 16, -112, 784, -68 }, wimp_ICON_TEXT |
 			wimp_ICON_HCENTRED | wimp_ICON_VCENTRED |
