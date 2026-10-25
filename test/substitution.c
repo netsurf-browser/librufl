@@ -202,7 +202,7 @@ static char *unescape(char *p) {
 	enum { normal, backslash, esc0, esc1 } state = normal;
 	char *s = p;
 	char *outp = p;
-	char c;
+	char c = 0;
 
 	/* Modify the data in place. It will either remain the
 	 * same size, or get smaller (depending on the presence
