@@ -365,6 +365,26 @@ int main(int argc, const char **argv)
 		break;
 	}
 
+	rufl_test_harness_discard_paint_calls();
+
+	/* Paint again, but expect replacements */
+	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
+			"!\xc2\xa0\xdc\x80", 5, 0, 0, 0));
+	for (size_t i = 0; i < cfg.n_fontencs; i++) {
+		const char *enc = NULL;
+		if (strcmp(cfg.fontencs[i].fontname, "Trinity.Medium") != 0)
+			continue;
+		if (strcmp(cfg.fontencs[i].encoding, "Symbol") != 0)
+			enc = cfg.fontencs[i].encoding;
+		rufl_test_harness_assert_paint_calls(
+		    "Trinity.Medium", enc, 160, 0, 0, false, false, "! ",
+		    "Corpus.Medium", "Latin1", 80, 50, 12, false, false, "07",
+		    "Corpus.Medium", "Latin1", 80, 50, 0, false, false, "00",
+		    NULL
+		);
+		break;
+	}
+
 	rufl_dump_state(true);
 
 	/* Obtain metrics for a glyph */
