@@ -69,7 +69,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	slash = strchr(font_name, '\\');
 	if (slash == NULL) {
 		/* Bare name: symbol font */
-		strncpy(name, font_name, sizeof(name));
+		strncpy(name, font_name, sizeof(name)-1);
 		name[sizeof(name)-1] = '\0';
 		strcpy(encoding, "Symbol");
 	} else {
@@ -77,7 +77,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 		strncpy(name, font_name, slash - font_name);
 		name[slash-font_name] = '\0';
 		assert(slash[1] == 'E');
-		strncpy(encoding, slash + 2, sizeof(encoding));
+		strncpy(encoding, slash + 2, sizeof(encoding)-1);
 		encoding[sizeof(encoding)-1] = '\0';
 	}
 
@@ -638,8 +638,9 @@ os_error *xos_read_mode_variable (os_mode mode, os_mode_var var, int *var_val,
 {
 	(void) mode;
 	(void) var;
-	(void) var_val;
 	(void) psr;
+
+	*var_val = 0;
 
 	return &unimplemented;
 }
