@@ -23,16 +23,40 @@ struct fontenc {
 	char *filepath;
 };
 
+struct expectation {
+	char *fontname;  /**< Fully qualified font name */
+	char *encoding;  /**< Expected encoding */
+	char *text;  /**< Expected text (in encoding) */
+	int xoff;  /**< x offset in _characters_ */
+	/**< y divisor_
+	 * Text is ordinarily placed on a common baseline
+	 * and this value will be *zero*. However, tofu
+	 * uses two rows of half-height characters and
+	 * this value will be 2 for the top row, whose
+	 * baseline is half way up the normal row height.
+	 */
+	int ydiv;
+	int sdiv;  /**< size divisor */
+};
+
+struct testcase {
+	char *fontname;  /**< Font to request */
+	char *input;  /**< UTF-8 encoded input */
+	struct expectation *expect;
+	size_t n_expect;
+	rufl_style style;  /**< rufl_paint style */
+};
+
 struct cfg {
 	const char *datadir;
 
 	struct expumap *expumaps;
-
 	struct fontenc *fontencs;
+	struct testcase *testcases;
 
 	size_t n_expumaps;
-
 	size_t n_fontencs;
+	size_t n_testcases;
 
 	int fm_version;
 	bool fm_ucs;
@@ -57,7 +81,22 @@ static int ftw_cb(const char *path, const struct stat *sb,
 
 static void cleanup(void)
 {
-	if (cfg.fontencs != NULL ) {
+	if (cfg.testcases != NULL) {
+		size_t i, j;
+
+		for (i = 0; i < cfg.n_testcases; i++) {
+			for (j = 0; j < cfg.testcases[i].n_expect; j++) {
+				free(cfg.testcases[i].expect[j].fontname);
+				free(cfg.testcases[i].expect[j].encoding);
+				free(cfg.testcases[i].expect[j].text);
+			}
+			free(cfg.testcases[i].expect);
+			free(cfg.testcases[i].input);
+			free(cfg.testcases[i].fontname);
+		}
+		free(cfg.testcases);
+	}
+	if (cfg.fontencs != NULL) {
 		size_t i;
 
 		for (i = 0; i < cfg.n_fontencs; i++) {
@@ -147,6 +186,181 @@ static void parse_fontmanager(struct cfg *cfg, char *data, size_t len)
 	cfg->preload = *preload == 'P';
 }
 
+static int fromhex(char val)
+{
+	if ('0' <= val && val <= '9')
+		return val - '0';
+	else if ('A' <= val && val <= 'F')
+		return val - 'A' + 10;
+	else if ('a' <= val && val <= 'f')
+		return val - 'a' + 10;
+	assert(0);
+	return -1;
+}
+
+static char *unescape(char *p) {
+	enum { normal, backslash, esc0, esc1 } state = normal;
+	char *s = p;
+	char *outp = p;
+	char c;
+
+	/* Modify the data in place. It will either remain the
+	 * same size, or get smaller (depending on the presence
+	 * of escape sequences); it can never grow. */
+	while (*p != '\0') {
+		if (state == normal && *p == '\\') {
+			state = backslash;
+		} else if (state == normal) {
+			*(outp++) = *p;
+		} else if (state == backslash && *p == 'x') {
+			c = 0;
+			state = esc0;
+		} else if (state == backslash) {
+			*(outp++) = '\\';
+			state = normal;
+		} else if (state == esc0) {
+			c = fromhex(*p);
+			state = esc1;
+		} else if (state == esc1) {
+			c = (((uint8_t) c) << 4) | fromhex(*p);
+			*(outp++) = c;
+			state = normal;
+		}
+		p++;
+	}
+	*outp = '\0';
+	return s;
+}
+
+static rufl_style style_from_string(const char *s)
+{
+	char *end;
+	uint32_t val = strtoul(s, &end, 10);
+
+	assert(100 <= val && val <= 900 && val % 100 == 0);
+
+	return (rufl_style) ((val / 100) | (*end == '/' ? rufl_SLANTED : 0));
+}
+
+static void parse_testcase(struct cfg *cfg, char *data, size_t len)
+{
+	struct testcase *tc;
+	char *p, *s, *input = NULL;
+	const char *index = NULL, *font = NULL, *style = NULL;
+	uint32_t testnum;
+
+	for (p = s = data; p < data+len; p++) {
+		if (*p == ' ' || *p == '\t') {
+			*p = '\0';
+			if (s != p) {
+				if (index == NULL)
+					index = s;
+				else if (font == NULL)
+					font = s;
+				else if (style == NULL)
+					style = s;
+				else if (input == NULL)
+					input = s;
+			}
+			s = p+1;
+		}
+	}
+	if (input == NULL)
+		input = s;
+
+	assert(index != NULL);
+	assert(font != NULL);
+	assert(style != NULL);
+	assert(input != NULL);
+
+	testnum = strtoul(index, &p, 10);
+	assert((size_t)(p-index) == strlen(index));
+
+	/* Testcases must be contiguous and monotonic and start from 1 */
+	assert(testnum == cfg->n_testcases + 1);
+
+	tc = realloc(cfg->testcases, (cfg->n_testcases + 1) * sizeof(*tc));
+	assert(tc != NULL);
+
+	cfg->testcases = tc;
+	cfg->testcases[cfg->n_testcases].fontname = strdup(font);
+	assert(cfg->testcases[cfg->n_testcases].fontname != NULL);
+	cfg->testcases[cfg->n_testcases].input = strdup(unescape(input));
+	assert(cfg->testcases[cfg->n_testcases].input != NULL);
+	cfg->testcases[cfg->n_testcases].expect = NULL;
+	cfg->testcases[cfg->n_testcases].n_expect = 0;
+	cfg->testcases[cfg->n_testcases].style = style_from_string(style);
+	cfg->n_testcases++;
+}
+
+static void parse_expect(struct cfg *cfg, char *data, size_t len)
+{
+	struct expectation *exp;
+	char *p, *s, *text = NULL;
+	const char *index = NULL, *fontname = NULL, *encoding = NULL;
+	const char *xoff = NULL, *ydiv = NULL, *sdiv = NULL;
+	uint32_t testnum;
+
+	for (p = s = data; p < data+len; p++) {
+		if (*p == ' ' || *p == '\t') {
+			*p = '\0';
+			if (s != p) {
+				if (index == NULL)
+					index = s;
+				else if (fontname == NULL)
+					fontname = s;
+				else if (encoding == NULL)
+					encoding = s;
+				else if (xoff == NULL)
+					xoff = s;
+				else if (ydiv == NULL)
+					ydiv = s;
+				else if (sdiv == NULL)
+					sdiv = s;
+				else if (text == NULL)
+					text = s;
+			}
+			s = p+1;
+		}
+	}
+	if (text == NULL)
+		text = s;
+
+	assert(index != NULL);
+	assert(fontname != NULL);
+	assert(encoding != NULL);
+	assert(xoff != NULL);
+	assert(ydiv != NULL);
+	assert(sdiv != NULL);
+	assert(text != NULL);
+
+	testnum = strtoul(index, &p, 10);
+	assert((size_t)(p-index) == strlen(index));
+
+	/* Testcases must be defined before their expectations */
+	assert(testnum <= cfg->n_testcases);
+
+	exp = realloc(cfg->testcases[testnum-1].expect,
+			(cfg->testcases[testnum-1].n_expect + 1) *
+			sizeof(*exp));
+	assert(exp != NULL);
+
+	cfg->testcases[testnum-1].expect = exp;
+	exp[cfg->testcases[testnum-1].n_expect].fontname = strdup(fontname);
+	assert(exp[cfg->testcases[testnum-1].n_expect].fontname != NULL);
+	exp[cfg->testcases[testnum-1].n_expect].encoding = strdup(encoding);
+	assert(exp[cfg->testcases[testnum-1].n_expect].encoding != NULL);
+	exp[cfg->testcases[testnum-1].n_expect].text = strdup(unescape(text));
+	assert(exp[cfg->testcases[testnum-1].n_expect].text != NULL);
+	exp[cfg->testcases[testnum-1].n_expect].xoff = strtoul(xoff, &p, 10);
+	assert((size_t)(p-xoff) == strlen(xoff));
+	exp[cfg->testcases[testnum-1].n_expect].ydiv = strtoul(ydiv, &p, 10);
+	assert((size_t)(p-ydiv) == strlen(ydiv));
+	exp[cfg->testcases[testnum-1].n_expect].sdiv = strtoul(sdiv, &p, 10);
+	assert((size_t)(p-sdiv) == strlen(sdiv));
+	cfg->testcases[testnum-1].n_expect++;
+}
+
 static void parse_directive(struct cfg *cfg, char *linecpy, size_t len)
 {
 	char *p, *s;
@@ -170,6 +384,10 @@ static void parse_directive(struct cfg *cfg, char *linecpy, size_t len)
 		parse_expumaps(cfg, s, len - (s - linecpy));
 	} else if (strcmp("\%fontmanager", directive) == 0) {
 		parse_fontmanager(cfg, s, len - (s - linecpy));
+	} else if (strcmp("\%tcase", directive) == 0) {
+		parse_testcase(cfg, s, len - (s - linecpy));
+	} else if (strcmp("\%expect", directive) == 0) {
+		parse_expect(cfg, s, len - (s - linecpy));
 	}
 }
 
@@ -349,51 +567,46 @@ int main(int argc, const char **argv)
 	assert(rufl_OK == rufl_font_bbox("Corpus", rufl_WEIGHT_500,
 				font_size, &bbox));
 
-	/* Paint a string containing characters from the ASCII, Latin1,
-	 * and neither encodings using the ASCII-only font. We expect the
-	 * Latin1 characters to be drawn using the Latin1 font. We expect
-	 * the unrepresentable characters to result in tofu drawn in Corpus. */
-	assert(rufl_OK == rufl_paint("ASCII", rufl_WEIGHT_500, font_size,
-			"!\xe2\x80\xa2\xdc\x80", 6, 0, 0, 0));
-	if (cfg.fm_ucs) {
-		/* UCS mode */
-		rufl_test_harness_assert_paint_calls(
-		    "ASCII.Medium", "UTF8", font_size, 0, 0, true, false, "!",
-		    "Latin1.Medium", "UTF8", font_size, bbox.x1, 0, true, false,
-				"\xe2\x80\xa2",
-		    /* Tofu: 4 digits, at half size, drawn in a 2x2 grid */
-		    "Corpus.Medium", "Latin1", font_size/2,
-				2*bbox.x1, bbox.y1/2, false, false, "07",
-		    "Corpus.Medium", "Latin1", font_size/2,
-				2*bbox.x1, 0, false, false, "00",
-		    NULL
-		);
-	} else {
-		/* Legacy mode */
-		for (i = 0; i < cfg.n_fontencs; i++) {
-			const char *enc = NULL;
-			if (strcmp(cfg.fontencs[i].fontname,
-						"ASCII.Medium") != 0)
-				continue;
-			if (strcmp(cfg.fontencs[i].encoding, "Symbol") != 0)
-				enc = cfg.fontencs[i].encoding;
-			rufl_test_harness_assert_paint_calls(
-			    "ASCII.Medium", enc, 160, 0, 0, false, false, "!",
-			    "Latin1.Medium", enc, 160, bbox.x1, 0, false, false,
-					"\x8f",
-			    /* Tofu: 4 digits, at half size,
-			     * drawn in a 2x2 grid */
-			    "Corpus.Medium", "Latin1", font_size/2,
-					2*bbox.x1, bbox.y1/2,
-					false, false, "07",
-			    "Corpus.Medium", "Latin1", font_size/2,
-					2*bbox.x1, 0,
-					false, false, "00",
+	/* Run the test cases */
+	for (i = 0; i < cfg.n_testcases; i++) {
+		const rufl_test_harness_paint_call *call = NULL;
+		const struct testcase *tc = &cfg.testcases[i];
+		size_t e;
 
-			    NULL
-			);
-			break;
+		rufl_test_harness_discard_paint_calls();
+
+		assert(rufl_OK == rufl_paint(tc->fontname, tc->style,
+			font_size, tc->input, strlen(tc->input), 0, 0, 0));
+
+		for (e = 0; e < tc->n_expect; e++) {
+			rufl_test_harness_paint_call ecall;
+			const struct expectation *exp = &tc->expect[e];
+
+			ecall.font.name = exp->fontname;
+			if (strcmp(exp->encoding, "Symbol") == 0)
+				ecall.font.encoding = NULL;
+			else
+				ecall.font.encoding = exp->encoding;
+			/* XXX: collusion with mock! */
+			ecall.font.xres = ecall.font.yres = 90;
+			ecall.font.xsize = font_size / exp->sdiv;
+			ecall.font.ysize = font_size / exp->sdiv;
+			ecall.xpos = exp->xoff * bbox.x1;
+			ecall.ypos = 0;
+			if (exp->ydiv != 0) {
+				ecall.ypos += bbox.y1 / exp->ydiv;
+			}
+			ecall.ucs4 = strcmp(exp->encoding, "UTF8") == 0;
+			ecall.trfm = false;
+			ecall.len = strlen(exp->text);
+
+			call = rufl_test_harness_paint_enumerate(call);
+			rufl_test_harness_assert_paint_call(call, &ecall,
+					exp->text);
 		}
+
+		call = rufl_test_harness_paint_enumerate(call);
+		assert(call == NULL);
 	}
 
 	rufl_quit();
