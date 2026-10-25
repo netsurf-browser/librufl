@@ -48,6 +48,8 @@ ifneq ($(findstring clean,$(MAKECMDGOALS)),clean)
   endif
 endif
 
+TESTCFLAGS := -UNDEBUG
+
 include $(NSBUILD)/Makefile.top
 
 # Extra installation rules
