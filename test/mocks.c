@@ -443,7 +443,10 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 	if (end)
 		*end = h->buffer;
 
-	if ((intptr_t) buffer != -1) {
+	if (buffer == NULL) {
+		h->buffer = NULL;
+		h->buffer_flags = 0;
+	} else if ((intptr_t) buffer != -1) {
 		h->buffer = (char *) buffer;
 		h->buffer_flags = flags;
 	}
