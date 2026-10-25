@@ -110,6 +110,10 @@ int main(int argc, const char **argv)
 	/* Trivial render */
 	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
 			"!\xc2\xa0", 3, 0, 0, 0));
+	rufl_test_harness_assert_paint_calls(
+	    "Trinity.Medium", "UTF8", 160, 0, 0, true, false, "!\xc2\xa0",
+	    NULL
+	);
 
 	/* Obtain metrics for a glyph */
 	assert(rufl_OK == rufl_glyph_metrics("Homerton", rufl_WEIGHT_500, 160,

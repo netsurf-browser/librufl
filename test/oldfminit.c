@@ -17,11 +17,19 @@ struct expumap {
 	size_t num_umaps;
 };
 
+struct fontenc {
+	char *fontname;
+	char *encoding;
+};
+
 struct cfg {
 	const char *datadir;
 
 	struct expumap *expumaps;
 	size_t n_expumaps;
+
+	struct fontenc *fontencs;
+	size_t n_fontencs;
 };
 
 static char template[] = "/tmp/oldfminitXXXXXX";
@@ -42,6 +50,16 @@ static int ftw_cb(const char *path, const struct stat *sb,
 
 static void cleanup(void)
 {
+	if (cfg.fontencs != NULL ) {
+		size_t i;
+
+		for (i = 0; i < cfg.n_fontencs; i++) {
+			free(cfg.fontencs[i].encoding);
+			free(cfg.fontencs[i].fontname);
+		}
+		free(cfg.fontencs);
+	}
+
 	if (cfg.expumaps != NULL) {
 		size_t i;
 
@@ -163,6 +181,7 @@ static void parse_encoding(struct cfg *cfg, char *linecpy, size_t len)
 	char *p, *s;
 	const char *font = NULL, *encoding = NULL, *file = NULL;
 	char *path;
+	struct fontenc *fe;
 
 	for (p = s = linecpy; p < linecpy+len; p++) {
 		if (*p == ' ' || *p == '\t') {
@@ -194,6 +213,16 @@ static void parse_encoding(struct cfg *cfg, char *linecpy, size_t len)
 	rufl_test_harness_set_font_encoding(font, encoding, path);
 
 	free(path);
+
+	fe = realloc(cfg->fontencs, (cfg->n_fontencs + 1) * sizeof(*fe));
+	assert(fe != NULL);
+
+	cfg->fontencs = fe;
+	cfg->fontencs[cfg->n_fontencs].fontname = strdup(font);
+	assert(cfg->fontencs[cfg->n_fontencs].fontname != NULL);
+	cfg->fontencs[cfg->n_fontencs].encoding = strdup(encoding);
+	assert(cfg->fontencs[cfg->n_fontencs].encoding != NULL);
+	cfg->n_fontencs++;
 }
 
 static void line_cb(struct cfg *cfg, const char *line, size_t len)
@@ -323,6 +352,18 @@ int main(int argc, const char **argv)
 	/* Trivial render */
 	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
 			"!\xc2\xa0", 3, 0, 0, 0));
+	for (size_t i = 0; i < cfg.n_fontencs; i++) {
+		const char *enc = NULL;
+		if (strcmp(cfg.fontencs[i].fontname, "Trinity.Medium") != 0)
+			continue;
+		if (strcmp(cfg.fontencs[i].encoding, "Symbol") != 0)
+			enc = cfg.fontencs[i].encoding;
+		rufl_test_harness_assert_paint_calls(
+		    "Trinity.Medium", enc, 160, 0, 0, false, false, "! ",
+		    NULL
+		);
+		break;
+	}
 
 	rufl_dump_state(true);
 
