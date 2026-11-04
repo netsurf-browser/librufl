@@ -1,5 +1,8 @@
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include <arpa/inet.h>
 
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
@@ -54,7 +57,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	char name[80], encoding[80];
 	const char *slash;
 	size_t ni, ei;
-	int fh;
+	int fh, first_free_fh = 256;
 
 	/* Default xres and yres */
 	if (xres <= 0)
@@ -66,7 +69,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 	slash = strchr(font_name, '\\');
 	if (slash == NULL) {
 		/* Bare name: symbol font */
-		strncpy(name, font_name, sizeof(name));
+		strncpy(name, font_name, sizeof(name)-1);
 		name[sizeof(name)-1] = '\0';
 		strcpy(encoding, "Symbol");
 	} else {
@@ -74,7 +77,7 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 		strncpy(name, font_name, slash - font_name);
 		name[slash-font_name] = '\0';
 		assert(slash[1] == 'E');
-		strncpy(encoding, slash + 2, sizeof(encoding));
+		strncpy(encoding, slash + 2, sizeof(encoding)-1);
 		encoding[sizeof(encoding)-1] = '\0';
 	}
 
@@ -107,15 +110,16 @@ os_error *xfont_find_font (char const *font_name, int xsize, int ysize,
 				h->fonts[fh].xsize == xsize &&
 				h->fonts[fh].ysize == ysize &&
 				h->fonts[fh].xres == xres &&
-				h->fonts[fh].yres == yres)
+				h->fonts[fh].yres == yres) {
 			break;
+		}
+		if (h->fonts[fh].refcnt == 0 && fh < first_free_fh) {
+			first_free_fh = fh;
+		}
 	}
 	if (fh == 256) {
 		/* No existing font found: allocate new one */
-		for (fh = 1; fh < 256; fh++) {
-			if (h->fonts[fh].refcnt == 0)
-				break;
-		}
+		fh = first_free_fh;
 		if (fh == 256) {
 			return &font_no_handles;
 		}
@@ -333,14 +337,48 @@ os_error *xfont_paint (font_f font, char const *string,
 	if (flags & font_GIVEN_FONT)
 		h->current_font = font;
 
-	//XXX:
-	//XXX: also, pay attention to redirection to buffer
-	(void) string;
-	(void) xpos;
-	(void) ypos;
-	(void) block;
-	(void) trfm;
-	(void) length;
+	/* Demand the inputs RUfl uses and no others */
+	assert((flags & ~(font_OS_UNITS | font_GIVEN_TRFM | font_GIVEN_LENGTH |
+			font_GIVEN_FONT | font_KERN | font_GIVEN32_BIT |
+			font_BLEND_FONT)) == 0);
+	assert((flags & (font_OS_UNITS | font_GIVEN_LENGTH | font_GIVEN_FONT |
+			font_KERN)) == (font_OS_UNITS | font_GIVEN_LENGTH |
+			font_GIVEN_FONT | font_KERN));
+	assert((flags & font_GIVEN_TRFM) == 0 || trfm != NULL);
+	assert((flags & font_GIVEN32_BIT) == 0 || h->fm_ucs);
+	assert(block == NULL);
+
+	if (h->buffer != NULL) {
+		/* Handle redirection to buffer (i.e. emit draw path) */
+		// XXX: implement
+		return NULL;
+	}
+
+	/* Otherwise, just record the call */
+	rufl_test_harness_paint_call_internal *call = malloc(
+			sizeof(rufl_test_harness_paint_call_internal) + length);
+	assert(call != NULL);
+	call->next = NULL;
+	call->name = h->fonts[font].name;
+	call->encoding = h->fonts[font].encoding;
+	call->pub.font.name = NULL;
+	call->pub.font.encoding = NULL;
+	call->pub.font.xsize = h->fonts[font].xsize;
+	call->pub.font.ysize = h->fonts[font].ysize;
+	call->pub.font.xres = h->fonts[font].xres;
+	call->pub.font.yres = h->fonts[font].yres;
+	call->pub.len = length;
+	call->pub.xpos = xpos;
+	call->pub.ypos = ypos;
+	call->pub.ucs4 = (flags & font_GIVEN32_BIT) != 0;
+	call->pub.trfm = (flags & font_GIVEN_TRFM) != 0;
+	memcpy(call->pub.data, string, length);
+	if (h->paint_calls == NULL) {
+		h->paint_calls = h->last_paint_call = call;
+	} else {
+		h->last_paint_call->next = call;
+		h->last_paint_call = call;
+	}
 
 	return NULL;
 }
@@ -380,13 +418,32 @@ os_error *xfont_scan_string (font_f font, char const *s,
 	else if (flags & font_GIVEN16_BIT)
 		advance = 2;
 
+	/* Length must be a multiple of the advance width */
+	assert((length & (advance - 1)) == 0);
+
 	/* Consume up to length bytes of input */
 	while (length > 0) {
 		uint32_t c = 0, i;
 		int cwidth;
+		/* Read bytes as big endian (regardless of host)
+		 * then we can use ntohl to rearrange things.
+		 *
+		 *	advance	i	shift multiple
+		 *	4
+		 *		0	(4-0-1) => 3
+		 *		1	(4-1-1) => 2
+		 *		2	(4-2-1) => 1
+		 *		3	(4-3-1) => 0
+		 *	2
+		 *		0	(2-0-1) => 1
+		 *		1	(2-1-1) => 0
+		 *	1
+		 *		0	(1-0-1) => 0
+		 */
 		for (i = 0; i < advance; i++) {
-			c |= s[i] << (advance - i - 1);
+			c |= ((uint32_t) s[i]) << ((advance - i - 1) * 8);
 		}
+		c = ntohl(c); /* Convert to host endian */
 		s += advance;
 		length -= advance;
 
@@ -442,7 +499,10 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 	if (end)
 		*end = h->buffer;
 
-	if ((intptr_t) buffer != -1) {
+	if (buffer == NULL) {
+		h->buffer = NULL;
+		h->buffer_flags = 0;
+	} else if ((intptr_t) buffer != -1) {
 		h->buffer = (char *) buffer;
 		h->buffer_flags = flags;
 	}
@@ -453,8 +513,21 @@ os_error *xfont_switch_output_to_buffer (font_output_flags flags,
 os_error *xfont_enumerate_characters (font_f font, int character,
 		int *next_character, int *internal_character_code)
 {
-	static int extchars[] = { 0x20, 0x21, 0x30, 0x31, 0x32, 0xa0, 0x10ac0, 0x20021, 0x30000, -1 };
-	static int intchars[] = {    1,    2,    3,    4,   -1,    5,       6,       7,       8 };
+	static const rufl_test_harness_glyph_map default_glyph_map = {
+		9,
+		{
+			{ 0x20, 1 },
+			{ 0x21, 2 },
+			{ 0x30, 3 },
+			{ 0x31, 4 },
+			{ 0x32, -1 },
+			{ 0xa0, 5 },
+			{ 0x10ac0, 6 },
+			{ 0x20021, 7 },
+			{ 0x30000, 8 },
+		},
+	};
+	const rufl_test_harness_glyph_map *gm;
 	size_t index = 0;
 	int next = -1, internal = -1;
 
@@ -468,27 +541,40 @@ os_error *xfont_enumerate_characters (font_f font, int character,
 	if (h->fonts[font].refcnt == 0)
 		return &font_no_font;
 
-	/* Broken FEC: skip first chunk unless code is valid.
-	 * (only 0x20 and 0x21 are valid in the first chunk here,
-	 * so we simply need to skip over these if the code is
-	 * less than 0x20 -- any other codes in the first chunk
-	 * will just fall out of the usual "next code" logic)
-	 */
-	if (h->fm_broken_fec && character < extchars[0])
-		index = 2;
+	if (h->glyph_maps == NULL ||
+			h->glyph_maps[h->fonts[font].name] == NULL) {
+		gm = &default_glyph_map;
+	} else {
+		gm = h->glyph_maps[h->fonts[font].name];
+	}
 
-	for (; index < (sizeof(intchars)/sizeof(intchars[0])); index++) {
-		if (extchars[index] == character) {
-			/* Found: return it and compute next */
-			next = extchars[index+1];
-			internal = intchars[index];
+	/* Broken FEC: skip first chunk unless code is valid.
+	 * Chunks are 16 codepoints wide, and the first one
+	 * begins at 0x20, so skip over all of its entries if
+	 * the input character is less than 0x20.
+	 */
+	if (h->fm_broken_fec && character < 0x20) {
+		while (index < gm->n_entries &&
+				gm->entries[index].codepoint < 0x30) {
+			index++;
+		}
+	}
+
+	for (; index < gm->n_entries; index++) {
+		if (gm->entries[index].codepoint == character) {
+			/* Found: capture and advance */
+			internal = gm->entries[index].index;
+			index++;
 			break;
-		} else if (extchars[index] > character) {
-			/* Not found and won't be: compute next */
-			next = extchars[index];
-			internal = -1;
+		} else if (gm->entries[index].codepoint > character) {
+			/* Not found and won't be: give up */
 			break;
 		}
+	}
+
+	/* Compute next codepoint, if there is one */
+	if (index < gm->n_entries) {
+		next = gm->entries[index].codepoint;
 	}
 
 	if (next_character != NULL)
@@ -552,8 +638,9 @@ os_error *xos_read_mode_variable (os_mode mode, os_mode_var var, int *var_val,
 {
 	(void) mode;
 	(void) var;
-	(void) var_val;
 	(void) psr;
+
+	*var_val = 0;
 
 	return &unimplemented;
 }

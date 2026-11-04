@@ -109,7 +109,23 @@ int main(int argc, const char **argv)
 
 	/* Trivial render */
 	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
-			"!\xc2\xa0", 3, 0, 0, 0));
+			"!\xc2\xa0""0", 4, 0, 0, 0));
+	rufl_test_harness_assert_paint_calls(
+	    "Trinity.Medium", "UTF8", 160, 0, 0, true, false, "!\xc2\xa0""0",
+	    NULL
+	);
+
+	rufl_test_harness_discard_paint_calls();
+
+	/* Paint again, but expect replacements */
+	assert(rufl_OK == rufl_paint("Trinity", rufl_WEIGHT_500, 160,
+			"x!\xc2\xa0""0", 5, 0, 0, 0));
+	rufl_test_harness_assert_paint_calls(
+	    "Corpus.Medium", "Latin1", 80, 0, 12, false, false, "00",
+	    "Corpus.Medium", "Latin1", 80, 0, 0, false, false, "78",
+	    "Trinity.Medium", "UTF8", 160, 17, 0, true, false, "!\xc2\xa0""0",
+	    NULL
+	);
 
 	/* Obtain metrics for a glyph */
 	assert(rufl_OK == rufl_glyph_metrics("Homerton", rufl_WEIGHT_500, 160,
