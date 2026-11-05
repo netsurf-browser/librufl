@@ -879,7 +879,7 @@ static void fill_map_for_block(const struct rufl_character_set **charsets,
 	unsigned int i, u, v;
 	/* Records the maximum number of characters sourced from a single
 	   font for each sub-block of 16 characters. */
-	char sub_block_count[16];
+	unsigned char sub_block_count[16];
 
 	memset(sub_block_count, 0, sizeof(sub_block_count));
 
