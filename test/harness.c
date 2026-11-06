@@ -177,7 +177,7 @@ static rufl_test_harness_glyph_map *parse_gm_line(
 {
 	const char *p;
 	size_t chunks;
-	int index = 0, num = 1, codepoint = 0;
+	int index = -1, num = 1, codepoint = -1;
 
 	/* The glyph map is a sparse encoding from glyph index -> codepoint
 	 * ordered by glyph index and with contiguous range support for
@@ -199,18 +199,21 @@ static rufl_test_harness_glyph_map *parse_gm_line(
 	} else {
 		for (p = line; p < line + len; p++) {
 			if (*p == ':') {
-				assert(codepoint != 0);
-				if (index == 0) {
+				assert(codepoint != -1);
+				if (index == -1) {
 					index = codepoint;
 				} else {
 					num = codepoint;
 				}
-				codepoint = 0;
+				codepoint = -1;
 			} else if (*p == '+') {
-				assert(codepoint != 0);
+				assert(codepoint != -1);
+				assert(index == -1);
 				index = codepoint;
-				codepoint = 0;
+				codepoint = -1;
 			} else {
+				if (codepoint == -1)
+					codepoint = 0;
 				codepoint = (codepoint << 4) | fromhex(*p);
 			}
 		}
@@ -226,8 +229,11 @@ static rufl_test_harness_glyph_map *parse_gm_line(
 		map = tmp;
 	}
 
+	assert(0 <= index);
+	assert(0 < num);
+	assert(0 < codepoint && codepoint + num - 1 <= 0x10ffff);
+
 	while (num-- > 0) {
-		assert(0 < codepoint && codepoint <= 0x10ffff);
 		map->entries[map->n_entries].codepoint = codepoint;
 		map->entries[map->n_entries].index = index;
 		map->n_entries += 1;

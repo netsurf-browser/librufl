@@ -516,15 +516,15 @@ os_error *xfont_enumerate_characters (font_f font, int character,
 	static const rufl_test_harness_glyph_map default_glyph_map = {
 		9,
 		{
-			{ 0x20, 1 },
-			{ 0x21, 2 },
-			{ 0x30, 3 },
-			{ 0x31, 4 },
+			{ 0x20, 0 },
+			{ 0x21, 1 },
+			{ 0x30, 2 },
+			{ 0x31, 3 },
 			{ 0x32, -1 },
-			{ 0xa0, 5 },
-			{ 0x10ac0, 6 },
-			{ 0x20021, 7 },
-			{ 0x30000, 8 },
+			{ 0xa0, 4 },
+			{ 0x10ac0, 5 },
+			{ 0x20021, 6 },
+			{ 0x30000, 7 },
 		},
 	};
 	const rufl_test_harness_glyph_map *gm;
