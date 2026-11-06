@@ -876,27 +876,70 @@ static size_t rufl_substitution_table_estimate_size_direct(size_t table_entries,
 static void fill_map_for_block(const struct rufl_character_set **charsets,
 		uint32_t block, uint16_t map_for_block[256])
 {
-	unsigned int i, u;
+	unsigned int i, u, v;
+	/* Records the maximum number of characters sourced from a single
+	   font for each sub-block of 16 characters. */
+#define SUB_BLOCK_SIZE 16
+	uint8_t sub_block_count[SUB_BLOCK_SIZE];
+
+	/* Sub-block size must be a power of 2 between [8, 256] */
+	assert(8 <= SUB_BLOCK_SIZE && SUB_BLOCK_SIZE <= 256);
+	assert((SUB_BLOCK_SIZE & (SUB_BLOCK_SIZE - 1)) == 0);
+
+	memset(sub_block_count, 0, sizeof(sub_block_count));
 
 	for (i = 0; i != rufl_font_list_entries; i++) {
 		if (!charsets[i])
 			continue;
 
 		if (charsets[i]->index[block] == BLOCK_FULL) {
+			/* If this font covers the whole block, use it in
+			   preference to bits of several different fonts. */
 			for (u = 0; u != 256; u++)
-				if (map_for_block[u] == NOT_AVAILABLE)
-					map_for_block[u] = i;
+				map_for_block[u] = i;
+			return;
 		} else if (charsets[i]->index[block] != BLOCK_EMPTY) {
 			const uint8_t *blk = charsets[i]->block[
 					charsets[i]->index[block]];
-			for (u = 0; u != 256; u++) {
-				if (map_for_block[u] == NOT_AVAILABLE &&
-						(blk[(u>>3)] & (1 << (u&7)))) {
-					map_for_block[u] = i;
+			for (u = 0; u != 256; u += SUB_BLOCK_SIZE) {
+				unsigned int n = 0;
+
+				/* First substitute only where needed,
+				 * counting the number of characters
+				 * that this font has in this sub-block. */
+				for (v = 0; v != SUB_BLOCK_SIZE; v++) {
+					if (blk[(v>>3)] & (1 << (v&7))) {
+						n++;
+						if (map_for_block[u+v] ==
+							NOT_AVAILABLE) {
+							map_for_block[u+v] = i;
+						}
+					}
 				}
+
+				if (sub_block_count[u>>4] == 0) {
+					/* No previous substitutions for this
+					 * block: record the count for this
+					 * font. */
+					sub_block_count[u>>4] = n;
+				} else if (sub_block_count[u>>4] < n) {
+					/* This font covers more of this
+					 * sub-block: use it for all glyphs
+					 * it has */
+					for (v = 0; v != SUB_BLOCK_SIZE; v++) {
+						if (blk[(v>>3)] & (1 << (v&7))) {
+							map_for_block[u+v] = i;
+						}
+					}
+					sub_block_count[u>>4] = n;
+				}
+
+				/* Advance to next sub-block. */
+				blk += (SUB_BLOCK_SIZE / 8);
 			}
 		}
 	}
+#undef SUB_BLOCK_SIZE
 }
 
 /**
