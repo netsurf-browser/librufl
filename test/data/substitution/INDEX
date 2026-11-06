@@ -4,3 +4,4 @@
 ucsbasic.cfg		Simple substitution with UCS font manager
 oldbasic.cfg		Simple substitution with non-UCS font manager
 ucssparse.cfg		Sparse font substitution with UCS font manager
+ucsstyle.cfg		Substituting styles with UCS font manager

@@ -37,6 +37,7 @@ struct expectation {
 	 */
 	int ydiv;
 	int sdiv;  /**< size divisor */
+	bool trfm;  /**< whether transformation matrix is applied */
 };
 
 struct testcase {
@@ -298,7 +299,7 @@ static void parse_expect(struct cfg *cfg, char *data, size_t len)
 	struct expectation *exp;
 	char *p, *s, *text = NULL;
 	const char *index = NULL, *fontname = NULL, *encoding = NULL;
-	const char *xoff = NULL, *ydiv = NULL, *sdiv = NULL;
+	const char *xoff = NULL, *ydiv = NULL, *sdiv = NULL, *trfm = NULL;
 	uint32_t testnum;
 
 	for (p = s = data; p < data+len; p++) {
@@ -317,6 +318,8 @@ static void parse_expect(struct cfg *cfg, char *data, size_t len)
 					ydiv = s;
 				else if (sdiv == NULL)
 					sdiv = s;
+				else if (trfm == NULL)
+					trfm = s;
 				else if (text == NULL)
 					text = s;
 			}
@@ -332,6 +335,7 @@ static void parse_expect(struct cfg *cfg, char *data, size_t len)
 	assert(xoff != NULL);
 	assert(ydiv != NULL);
 	assert(sdiv != NULL);
+	assert(trfm != NULL);
 	assert(text != NULL);
 
 	testnum = strtoul(index, &p, 10);
@@ -358,6 +362,8 @@ static void parse_expect(struct cfg *cfg, char *data, size_t len)
 	assert((size_t)(p-ydiv) == strlen(ydiv));
 	exp[cfg->testcases[testnum-1].n_expect].sdiv = strtoul(sdiv, &p, 10);
 	assert((size_t)(p-sdiv) == strlen(sdiv));
+	exp[cfg->testcases[testnum-1].n_expect].trfm = strtoul(trfm, &p, 10);
+	assert((size_t)(p-trfm) == strlen(trfm));
 	cfg->testcases[testnum-1].n_expect++;
 }
 
@@ -597,7 +603,7 @@ int main(int argc, const char **argv)
 				ecall.ypos += bbox.y1 / exp->ydiv;
 			}
 			ecall.ucs4 = strcmp(exp->encoding, "UTF8") == 0;
-			ecall.trfm = false;
+			ecall.trfm = exp->trfm;
 			ecall.len = strlen(exp->text);
 
 			call = rufl_test_harness_paint_enumerate(call);
