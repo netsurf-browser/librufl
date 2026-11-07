@@ -14,9 +14,62 @@
 
 #include "rufl_internal.h"
 
+static unsigned int rufl_check_used_weight(struct rufl_family_map_entry *e,
+		int used_weight, int slant);
 static int rufl_family_list_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_place_in_cache(unsigned int font, unsigned int font_size,
 		const char *encoding, font_f f);
+
+
+/**
+ * Check the proposed weight in the family table, and return font number if
+ * suitable, prefering the font with matching slant.
+ */
+unsigned int rufl_check_used_weight(struct rufl_family_map_entry *e,
+		int used_weight, int slant)
+{
+	if (used_weight < 0 || used_weight > 8)
+		return NO_FONT;
+	if (e->font[used_weight][slant] != NO_FONT)
+		return e->font[used_weight][slant];
+	return e->font[used_weight][1 - slant];
+}
+
+
+/**
+ * Given a Unicode codepoint and desired style, find substitute font with
+   closest style.
+ */
+rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
+		unsigned int *font)
+{
+	unsigned int font1, font2;
+	unsigned int weight = (font_style & 0xf) - 1;
+	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
+
+	font1 = rufl_substitution_table_lookup(u);
+	if (font1 != NOT_AVAILABLE &&
+			(rufl_font_list[font1].weight != weight ||
+			 rufl_font_list[font1].slant != slant)) {
+		/* seek closer match, placing final answer in font1 */
+		const char *font1_family;
+		struct rufl_character_set *charset;
+		rufl_code code;
+
+		font1_family = rufl_family_list[rufl_font_list[font1].family];
+		code = rufl_find_font_family(font1_family, font_style, &font2,
+				NULL, &charset);
+		if (code != rufl_OK)
+			return code;
+		if (font2 != font1 && charset &&
+				rufl_character_set_test(charset, u))
+			font1 = font2;
+	}
+
+	*font = font1;
+	return rufl_OK;
+}
+
 
 /**
  * Find a font family.
@@ -26,9 +79,9 @@ rufl_code rufl_find_font_family(const char *font_family,
 		unsigned int *slanted, struct rufl_character_set **charset)
 {
 	const char **family;
-	unsigned int f;
-	unsigned int weight, slant, used_weight;
-	unsigned int search_direction;
+	unsigned int f, diff, slant;
+	int weight, used_weight;
+	int search_direction;
 
 	family = bsearch(font_family, rufl_family_list,
 			rufl_family_list_entries,
@@ -43,33 +96,31 @@ rufl_code rufl_find_font_family(const char *font_family,
 	struct rufl_family_map_entry *e =
 			&rufl_family_map[family - rufl_family_list];
 	used_weight = weight;
+
+	/* below Regular weight, favour lighter weights first */
 	if (weight <= 2)
 		search_direction = -1;
 	else
 		search_direction = +1;
+
+	diff = 0;
 	while (1) {
-		if (e->font[used_weight][slant] != NO_FONT) {
-			/* the weight and slant is available */
-			f = e->font[used_weight][slant];
+		/* look alternately in each direction for closest weight */
+		/* exact match tested first time through loop with diff zero */
+		used_weight = weight + search_direction * diff;
+		f = rufl_check_used_weight(e, used_weight, slant);
+		if ( f != NO_FONT )
 			break;
+
+		if ( diff ) {
+			/* check opposite direction, on subsequent passes */
+			used_weight = weight - search_direction * diff;
+			f = rufl_check_used_weight(e, used_weight, slant);
+			if ( f != NO_FONT )
+				break;
 		}
-		if (e->font[used_weight][1 - slant] != NO_FONT) {
-			/* slanted, and non-slanted weight exists, or vv. */
-			f = e->font[used_weight][1 - slant];
-			break;
-		}
-		if (used_weight == 0) {
-			/* searched down without finding a weight: search up */
-			used_weight = weight + 1;
-			search_direction = +1;
-		} else if (used_weight == 8) {
-			/* searched up without finding a weight: search down */
-			used_weight = weight - 1;
-			search_direction = -1;
-		} else {
-			/* try the next weight in the current direction */
-			used_weight += search_direction;
-		}
+
+		diff++;
 	}
 
 	if (font)

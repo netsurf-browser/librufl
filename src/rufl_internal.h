@@ -192,6 +192,8 @@ extern bool rufl_old_font_manager;
 /** Font manager supports background blending */
 extern bool rufl_can_background_blend;
 
+rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
+		unsigned int *font);
 rufl_code rufl_find_font_family(const char *family, rufl_style font_style,
 		unsigned int *font, unsigned int *slanted,
 		struct rufl_character_set **charset);
