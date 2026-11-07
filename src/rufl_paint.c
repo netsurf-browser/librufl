@@ -229,8 +229,7 @@ rufl_code rufl_process(rufl_action action,
 	else if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
 	else {
-		font1 = rufl_substitution_table_lookup(u);
-		code = rufl_optimise_style(&font1, font_style, u);
+		code = rufl_find_alternate_font(u, font_style, &font1);
 		if (code != rufl_OK)
 			return code;
 	}
@@ -255,9 +254,8 @@ rufl_code rufl_process(rufl_action action,
 			else if (font0 == NOT_AVAILABLE || font0 == font ||
 					!rufl_character_set_test(charset0, u))
 			{
-				font1 = rufl_substitution_table_lookup(u);
-				code = rufl_optimise_style(&font1,
-						font_style, u);
+				code = rufl_find_alternate_font(u, font_style,
+						&font1);
 				if (code != rufl_OK)
 					return code;
 			}

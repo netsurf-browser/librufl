@@ -37,6 +37,41 @@ unsigned int rufl_check_used_weight(struct rufl_family_map_entry *e,
 
 
 /**
+ * Given a Unicode codepoint and desired style, find substitute font with
+   closest style.
+ */
+rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
+		unsigned int *font)
+{
+	unsigned int font1, font2;
+	unsigned int weight = (font_style & 0xf) - 1;
+	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
+
+	font1 = rufl_substitution_table_lookup(u);
+	if (font1 != NOT_AVAILABLE &&
+			(rufl_font_list[font1].weight != weight ||
+			 rufl_font_list[font1].slant != slant)) {
+		/* seek closer match, placing final answer in font1 */
+		const char *font1_family;
+		struct rufl_character_set *charset;
+		rufl_code code;
+
+		font1_family = rufl_family_list[rufl_font_list[font1].family];
+		code = rufl_find_font_family(font1_family, font_style, &font2,
+				NULL, &charset);
+		if (code != rufl_OK)
+			return code;
+		if (font2 != font1 && charset &&
+				rufl_character_set_test(charset, u))
+			font1 = font2;
+	}
+
+	*font = font1;
+	return rufl_OK;
+}
+
+
+/**
  * Find a font family.
  */
 rufl_code rufl_find_font_family(const char *font_family,
@@ -44,9 +79,9 @@ rufl_code rufl_find_font_family(const char *font_family,
 		unsigned int *slanted, struct rufl_character_set **charset)
 {
 	const char **family;
-	unsigned int f;
-	int weight, slant, used_weight;
-	int search_direction, diff;
+	unsigned int f, diff, slant;
+	int weight, used_weight;
+	int search_direction;
 
 	family = bsearch(font_family, rufl_family_list,
 			rufl_family_list_entries,
@@ -71,13 +106,14 @@ rufl_code rufl_find_font_family(const char *font_family,
 	diff = 0;
 	while (1) {
 		/* look alternately in each direction for closest weight */
+		/* exact match tested first time through loop with diff zero */
 		used_weight = weight + search_direction * diff;
 		f = rufl_check_used_weight(e, used_weight, slant);
 		if ( f != NO_FONT )
 			break;
 
 		if ( diff ) {
-			/* check opposite direction */
+			/* check opposite direction, on subsequent passes */
 			used_weight = weight - search_direction * diff;
 			f = rufl_check_used_weight(e, used_weight, slant);
 			if ( f != NO_FONT )
