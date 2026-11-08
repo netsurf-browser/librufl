@@ -17,6 +17,7 @@
 static unsigned int rufl_check_used_weight(struct rufl_family_map_entry *e,
 		int used_weight, int slant);
 static int rufl_family_list_cmp(const void *keyval, const void *datum);
+static int rufl_font_list_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_place_in_cache(unsigned int font, unsigned int font_size,
 		const char *encoding, font_f f);
 
@@ -78,56 +79,92 @@ rufl_code rufl_find_font_family(const char *font_family,
 		rufl_style font_style, unsigned int *font,
 		unsigned int *slanted, struct rufl_character_set **charset)
 {
-	const char **family;
-	unsigned int f, diff, slant;
-	int weight, used_weight;
-	int search_direction;
+	unsigned int f;
 
-	family = bsearch(font_family, rufl_family_list,
-			rufl_family_list_entries,
-			sizeof rufl_family_list[0], rufl_family_list_cmp);
-	if (!family)
+	if (!font_family)
 		return rufl_FONT_NOT_FOUND;
 
-	weight = (font_style & 0xf) - 1;
-	assert(weight <= 8);
-	slant = font_style & rufl_SLANTED ? 1 : 0;
+	if (*font_family == '\\') {
+		/* "font_family" contains a font identifier: direct lookup */
+		const struct rufl_font_list_entry *fe;
 
-	struct rufl_family_map_entry *e =
-			&rufl_family_map[family - rufl_family_list];
-	used_weight = weight;
+		/* We only support a single qualifier */
+		if (strchr(font_family + 1, '\\') != NULL)
+			return rufl_FONT_NOT_FOUND;
 
-	/* below Regular weight, favour lighter weights first */
-	if (weight <= 2)
-		search_direction = -1;
-	else
-		search_direction = +1;
+		/* There must be at least one character after the qualifier */
+		if (strlen(font_family) < 3)
+			return rufl_FONT_NOT_FOUND;
 
-	diff = 0;
-	while (1) {
-		/* look alternately in each direction for closest weight */
-		/* exact match tested first time through loop with diff zero */
-		used_weight = weight + search_direction * diff;
-		f = rufl_check_used_weight(e, used_weight, slant);
-		if ( f != NO_FONT )
-			break;
+		/* Ensure the qualifier is F */
+		if (*(font_family + 1) != 'F')
+			return rufl_FONT_NOT_FOUND;
 
-		if ( diff ) {
-			/* check opposite direction, on subsequent passes */
-			used_weight = weight - search_direction * diff;
+		/* We have a valid identifier string. Search for the font */
+		fe = bsearch(font_family+2, rufl_font_list,
+				rufl_font_list_entries,
+				sizeof rufl_font_list[0], rufl_font_list_cmp);
+		if (!fe)
+			return rufl_FONT_NOT_FOUND;
+
+		f = fe - rufl_font_list;
+	} else {
+		/* "font_family" is a family name: map via family map */
+		const char **family;
+		unsigned int diff, slant;
+		int weight, used_weight;
+		int search_direction;
+
+		family = bsearch(font_family, rufl_family_list,
+				rufl_family_list_entries,
+				sizeof rufl_family_list[0],
+				rufl_family_list_cmp);
+		if (!family)
+			return rufl_FONT_NOT_FOUND;
+
+		weight = (font_style & 0xf) - 1;
+		assert(weight <= 8);
+		slant = font_style & rufl_SLANTED ? 1 : 0;
+
+		struct rufl_family_map_entry *e =
+				&rufl_family_map[family - rufl_family_list];
+		used_weight = weight;
+
+		/* below Regular weight, favour lighter weights first */
+		if (weight <= 2)
+			search_direction = -1;
+		else
+			search_direction = +1;
+
+		diff = 0;
+		while (1) {
+			/* look alternately in each direction for closest
+			 * weight. exact match tested first time through
+			 * loop with diff zero */
+			used_weight = weight + search_direction * diff;
 			f = rufl_check_used_weight(e, used_weight, slant);
 			if ( f != NO_FONT )
 				break;
-		}
 
-		diff++;
+			if ( diff ) {
+				/* check opposite direction, on subsequent
+				 * passes */
+				used_weight = weight - search_direction * diff;
+				f = rufl_check_used_weight(e, used_weight,
+						slant);
+				if ( f != NO_FONT )
+					break;
+			}
+
+			diff++;
+		}
 	}
 
 	if (font)
 		(*font) = f;
 
 	if (slanted)
-		(*slanted) = slant;
+		(*slanted) = rufl_font_list[f].slant;
 
 	if (charset)
 		(*charset) = rufl_font_list[f].charset;
@@ -214,6 +251,13 @@ int rufl_family_list_cmp(const void *keyval, const void *datum)
 	return strcasecmp(key, *entry);
 }
 
+
+int rufl_font_list_cmp(const void *keyval, const void *datum)
+{
+	const char *key = keyval;
+	const struct rufl_font_list_entry * const entry = datum;
+	return strcasecmp(key, entry->identifier);
+}
 
 /**
  * Place a font into the recent-use cache, making space if necessary.
