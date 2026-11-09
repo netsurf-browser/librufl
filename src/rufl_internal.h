@@ -134,11 +134,11 @@ struct rufl_font_list_entry {
 	struct rufl_unicode_map *umap;
 	/** Family that this font belongs to (index in rufl_family_list and
 	 * rufl_family_map). */
-	uint32_t family;
+	uint32_t family: 16;
 	/** Font weight (0 to 8). */
-	uint32_t weight;
+	uint32_t weight: 4;
 	/** Font slant (0 or 1). */
-	uint32_t slant;
+	uint32_t slant: 1;
 };
 /** List of all available fonts. */
 extern struct rufl_font_list_entry *rufl_font_list;
