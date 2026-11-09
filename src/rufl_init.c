@@ -278,9 +278,19 @@ rufl_code rufl_init_font_list(void)
 	char identifier[80], local_name[80];
 
 	/* Permit up to 65535 font faces (we rely on 16bits of storage
-	 * being sufficient in the substitution tables. */
+	 * being sufficient in the substitution tables). This is valid
+	 * until the point that Font_ListFonts is altered to use more
+	 * than 16bits for its counter. */
 	while (context != -1 && rufl_font_list_entries < UINT16_MAX) {
-		/* read identifier */
+		/* Read identifier.
+		 *
+		 * Note: Font_ListFonts will return the enumerated
+		 * entries sorted by *local name*. Thus, if localisation
+		 * of font names has occurred and local names sort
+		 * differently from the identifiers, the *identifiers*
+		 * will *not* be returned in a sorted order. This holds
+		 * true even if the local font name is not requested.
+		 */
 		rufl_fm_error = xfont_list_fonts((byte *)identifier,
 				font_RETURN_FONT_NAME |
 				font_RETURN_LOCAL_FONT_NAME |
@@ -417,11 +427,22 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	rufl_font_list[rufl_font_list_entries].num_umaps = 0;
 	rufl_font_list_entries++;
 
-	/* determine family, weight, and slant */
+	/* For historic reasons, RUfl family names are localized.
+	 * However, there is no guarantee whatsoever that the localized
+	 * name bears any resemblance to the font identifier (not least,
+	 * with the exception of the optional trailing "*", the value of
+	 * the Messages file entry is entirely free-form).
+	 * Therefore, this family grouping logic only actually works
+	 * when font names are untranslated or the translated names
+	 * have the same shape as the identifier.
+	 */
 	dot = strchr(local_name, '.');
 	family = local_name;
 	if (dot)
 		*dot = 0;
+
+	/* Determine weight and slant by inspecting the identifier. */
+	dot = strchr(identifier, '.');
 	while (dot) {
 		part = dot + 1;
 		dot = strchr(part, '.');
