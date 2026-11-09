@@ -211,6 +211,9 @@ static void parse_encoding(struct cfg *cfg, char *linecpy, size_t len)
 	strcpy(path+strlen(cfg->datadir)+1, file);
 
 	rufl_test_harness_set_font_encoding(font, encoding, path);
+	rufl_test_harness_set_font_properties(font,
+			strcmp(encoding, "Symbol") == 0,
+			strcmp(encoding, "Symbol") == 0);
 
 	free(path);
 

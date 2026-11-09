@@ -7,7 +7,7 @@
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
-#include <oslib/osfscontrol.h>
+#include <oslib/osfile.h>
 #include <oslib/taskwindow.h>
 #include <oslib/wimp.h>
 #include <oslib/wimpreadsysinfo.h>
@@ -216,6 +216,52 @@ os_error *xfont_read_font_metrics (font_f font, font_bbox_info *bbox_info,
 		*misc_info_size = sizeof(font_metrics_misc_info);
 	if (kern_info_size != NULL)
 		*kern_info_size = 0;
+
+	return NULL;
+}
+
+os_error *xfont_read_font_prefix (font_f font, char *buffer, int size,
+		char **end)
+{
+	const char *prefix = "Resources:$.Fonts.";
+	const char *identifier;
+	size_t prefix_len = strlen(prefix);
+	size_t idlen, tocopy;
+
+	if (buffer == NULL || size <= 0)
+		return &buff_overflow;
+	if (font == 0)
+		return &font_bad_font_number;
+	if (h->fonts[font].refcnt == 0)
+		return &font_no_font;
+	if (h->font_names == NULL)
+		return &font_no_font;
+	identifier = h->font_names[h->fonts[font].name];
+	idlen = strlen(identifier);
+
+	tocopy = ((size_t) size < prefix_len) ? (size_t) size : prefix_len;
+	memcpy(buffer, prefix, tocopy);
+	if (tocopy != prefix_len)
+		return &buff_overflow;
+
+	size -= prefix_len;
+	tocopy = ((size_t) size < idlen) ? (size_t) size : idlen;
+	memcpy(buffer + prefix_len, identifier, tocopy);
+	if (tocopy != idlen)
+		return &buff_overflow;
+
+	size -= idlen;
+	if (size <= 0)
+		return &buff_overflow;
+
+	*(buffer + prefix_len + idlen) = '.';
+	if (size <= 1)
+		return &buff_overflow;
+
+	*(buffer + prefix_len + idlen + 1) = '\0';
+
+	if (end != NULL)
+		*end = buffer + prefix_len + idlen + 1;
 
 	return NULL;
 }
@@ -647,28 +693,74 @@ os_error *xos_read_mode_variable (os_mode mode, os_mode_var var, int *var_val,
 
 /****************************************************************************/
 
-os_error *xosfscontrol_canonicalise_path (char const *path_name, char *buffer,
-		char const *var, char const *path, int size, int *spare)
+os_error *xosfile_read_stamped_no_path(char const *file_name,
+		fileswitch_object_type *obj_type, bits *load_addr,
+		bits *exec_addr, int *size, fileswitch_attr *attr,
+		bits *file_type)
 {
 	const char *prefix = "Resources:$.Fonts.";
-	size_t len = strlen(path_name) + strlen(prefix) + 1;
+	const char *dot;
+	size_t prefix_len = strlen(prefix);
+	fileswitch_object_type type = osfile_NOT_FOUND;
+	bits ftype = osfile_TYPE_TEXT;
 
-	if (strcmp(var, "Font$Path") != 0 || path != NULL)
-		return &unimplemented;
-
-	if (buffer == NULL && size != 0)
+	if (file_name == NULL)
 		return &bad_parameters;
 
-	if (buffer != NULL && size < (int) len)
-		return &buff_overflow;
+	/* Only support looking at fonts, not arbitrary paths */
+	if (strncasecmp(file_name, prefix, prefix_len) == 0) {
+		/* Find the leafname */
+		dot = strrchr(file_name, '.');
+		if (dot != NULL && dot > file_name + prefix_len) {
+			size_t fidx;
+			size_t idlen = dot - (file_name + prefix_len);
+			char identifier[idlen + 1];
 
-	if (buffer != NULL) {
-		strcpy(buffer, prefix);
-		strcpy(buffer + strlen(prefix), path_name);
+			/* Determine if we know about this font */
+			memcpy(identifier, file_name + prefix_len, idlen);
+			identifier[idlen] = 0;
+			for (fidx = 0; fidx < h->n_font_names; fidx++) {
+				if (strcasecmp(identifier,
+						h->font_names[fidx]) == 0)
+					break;
+			}
+
+			if (fidx < h->n_font_names &&
+					h->font_properties != NULL &&
+					h->font_properties[fidx].is_symbol) {
+				/* We have a symbol font (otherwise it
+				 * is a language font, which has neither
+				 * an IntMetrics file nor a private Encoding) */
+				if (strcasecmp(dot+1, "IntMetrics") == 0) {
+					type = osfile_IS_FILE;
+					ftype = osfile_TYPE_FONT;
+				} else if (strcasecmp(dot+1, "Encoding") == 0) {
+					if (h->font_properties[
+							fidx].has_encoding) {
+						type = osfile_IS_FILE;
+					}
+				}
+			}
+		}
 	}
 
-	if (spare != NULL)
-		*spare = size - len;
+	if (obj_type != NULL)
+		*obj_type = type;
+
+	if (load_addr != NULL)
+		*load_addr = 0;
+
+	if (exec_addr != NULL)
+		*exec_addr = 0;
+
+	if (size != NULL)
+		*size = 0;
+
+	if (attr != NULL)
+		*attr = fileswitch_ATTR_OWNER_READ;
+
+	if (file_type != NULL)
+		*file_type = ftype;
 
 	return NULL;
 }

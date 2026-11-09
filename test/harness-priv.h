@@ -37,6 +37,11 @@ typedef struct rufl_test_harness_paint_call_internal {
 } rufl_test_harness_paint_call_internal;
 
 typedef struct {
+	bool is_symbol;
+	bool has_encoding;
+} rufl_test_harness_font_properties;
+
+typedef struct {
 	int fm_version;
 	bool fm_ucs;
 	bool fm_broken_fec;
@@ -52,6 +57,9 @@ typedef struct {
 
 	/* n_font_names entries */
 	rufl_test_harness_glyph_map **glyph_maps;
+
+	/* n_font_names entries */
+	rufl_test_harness_font_properties *font_properties;
 
 	/* At most 256 active font handles */
 	rufl_test_harness_sized_font fonts[256];

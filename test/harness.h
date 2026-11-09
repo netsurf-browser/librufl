@@ -25,6 +25,8 @@ void rufl_test_harness_set_font_encoding(const char *fontname,
 		const char *encoding, const char *path);
 void rufl_test_harness_set_font_glyph_map(const char *fontname,
 		const char *path);
+void rufl_test_harness_set_font_properties(const char *fontname,
+		bool is_symbol, bool has_encoding);
 
 const rufl_test_harness_paint_call *rufl_test_harness_paint_enumerate(
 		const rufl_test_harness_paint_call *current);

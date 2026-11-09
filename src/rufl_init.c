@@ -19,7 +19,7 @@
 #include <oslib/font.h>
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
-#include <oslib/osfscontrol.h>
+#include <oslib/osfile.h>
 #include <oslib/taskwindow.h>
 #include <oslib/wimp.h>
 #include <oslib/wimpreadsysinfo.h>
@@ -310,50 +310,96 @@ rufl_code rufl_init_font_list(void)
 
 rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 {
-	int size;
 	struct rufl_font_list_entry *font_list;
 	char *dot;
 	const char **family_list;
 	const char *family, *part;
 	unsigned int weight = 0;
 	unsigned int slant = 0;
-	bool special = false;
+	bool special = false, may_substitute = false;
 	struct rufl_family_map_entry *family_map;
 	unsigned int i;
 	struct rufl_weight_table_entry *entry;
+	char prefix[1024];
+	char *prefix_end;
+	font_f font;
+	fileswitch_object_type obj_type;
+
+	/* Open the font with no explicit encoding (it doesn't matter
+	 * for our needs here -- we only want to read its prefix) */
+	rufl_fm_error = xfont_find_font(identifier, 160, 160, 0, 0,
+			&font, 0, 0);
+	if (rufl_fm_error) {
+		LOG("xfont_find_font(\"%s\"): 0x%x: %s", identifier,
+				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		return rufl_OK;
+	}
+
+	/* Read the font's prefix so that we can inspect its data files.
+	 * We cannot directly obtain the correct encoding file path
+	 * via xfont_read_encoding_filename because that results in the
+	 * wrong answer when the system alphabet is UTF8.
+	 */
+	rufl_fm_error = xfont_read_font_prefix(font, prefix, sizeof prefix,
+			&prefix_end);
+	if (rufl_fm_error) {
+		LOG("xfont_read_font_prefix: 0x%x: %s",
+				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		xfont_lose_font(font);
+		return rufl_OK;
+	}
+
+	/* Done with font handle */
+	xfont_lose_font(font);
+
+	/* Look for an IntMetrics file */
+	strncpy(prefix_end, "IntMetrics",
+			sizeof prefix - (prefix_end - prefix) - 1);
+	prefix[sizeof prefix - 1] = 0;
+
+	rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
+			0, 0, 0, 0, 0);
+	if (rufl_fm_error) {
+		LOG("xosfile_read_stamped_no_path: 0x%x: %s",
+				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		return rufl_OK;
+	}
+
+	if (obj_type == osfile_IS_FILE) {
+		/* An IntMetrics file exists, so this is a symbol font.
+		 * Does it have an Encoding file? */
+		strncpy(prefix_end, "Encoding",
+				sizeof prefix - (prefix_end - prefix) - 1);
+		prefix[sizeof prefix - 1] = 0;
+
+		rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
+				0, 0, 0, 0, 0);
+		if (rufl_fm_error) {
+			LOG("xosfile_read_stamped_no_path: 0x%x: %s",
+					rufl_fm_error->errnum,
+					rufl_fm_error->errmess);
+			return rufl_OK;
+		}
+
+		/* Many "symbol" fonts have no Encoding file so the charset
+		 * determined by scanning (or loaded from the cache) will
+		 * reflect the contents of the /Default (UCS FM) or Latin1
+		 * (old FM) encodings. This is as good an answer as anything
+		 * for this font itself but mark it ineligible for inclusion
+		 * in the substitution tables if it has no Encoding file
+		 * (as the charset is speculative, at best) */
+		may_substitute = (obj_type == osfile_IS_FILE);
+	} else {
+		/* No IntMetrics file, so this is a language font.
+		 * These are always eligible for substitution. */
+		may_substitute = true;
+	}
 
 	/* Check that:
 	 * a) it's not a RiScript generated font
 	 * b) it's not a TeX font	 */
 
-	/* Read required buffer size */
-	rufl_fm_error = xosfscontrol_canonicalise_path(identifier, 0,
-			"Font$Path", 0, 0, &size);
-	if (rufl_fm_error) {
-		LOG("xosfscontrol_canonicalise_path(\"%s\", ...): 0x%x: %s",
-				identifier,
-				rufl_fm_error->errnum,
-				rufl_fm_error->errmess);
-		return rufl_OK;
-	}
-	/* size is -(space required - 1) so negate and add 1 */
-	size = -size + 1;
-
-	/* Create buffer and canonicalise path */
-	char fullpath[size];
-	rufl_fm_error = xosfscontrol_canonicalise_path(identifier,
-			fullpath, "Font$Path", 0, size, 0);
-	if (rufl_fm_error) {
-		LOG("xosfscontrol_canonicalise_path(\"%s\", ...): 0x%x: %s",
-				identifier,
-				rufl_fm_error->errnum,
-				rufl_fm_error->errmess);
-		return rufl_OK;
-	}
-
-	/* LOG("%s", fullpath); */
-
-	if (strstr(fullpath, "RiScript") || strstr(fullpath, "!TeXFonts"))
+	if (strstr(prefix, "RiScript") || strstr(prefix, "!TeXFonts"))
 		/* Ignore this font */
 		return rufl_OK;
 
@@ -440,6 +486,8 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 			rufl_family_list_entries - 1;
 	rufl_font_list[rufl_font_list_entries - 1].weight = weight;
 	rufl_font_list[rufl_font_list_entries - 1].slant = slant;
+	rufl_font_list[rufl_font_list_entries - 1].may_substitute =
+			may_substitute;
 
 	return rufl_OK;
 }
@@ -1310,7 +1358,7 @@ rufl_code rufl_init_read_encoding(font_f font,
 	unsigned int i = 0;
 	unsigned int n = 0;
 	int c;
-	char filename[200];
+	char filename[1024];
 	char s[200];
 	FILE *fp;
 
@@ -1324,7 +1372,9 @@ rufl_code rufl_init_read_encoding(font_f font,
 
 	fp = fopen(filename, "r");
 	if (!fp && rufl_old_font_manager) {
-		/* many "symbol" fonts have no encoding file */
+		/* Many "symbol" fonts have no encoding file.
+		 * Use Latin1 if so (as this aligns with the UCS FontManager
+		 * using the /Default encoding, which is basically Latin1) */
 		fp = fopen("Resources:$.Fonts.Encodings.Latin1", "r");
 	}
 	if (!fp)

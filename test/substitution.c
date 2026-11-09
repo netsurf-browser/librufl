@@ -1,5 +1,6 @@
 #include <ftw.h>
 #include <libgen.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,10 +18,12 @@ struct expumap {
 	size_t num_umaps;
 };
 
-struct fontenc {
+struct fontspec {
 	char *fontname;
 	char *encoding;
 	char *filepath;
+	bool is_symbol;
+	bool has_encoding;
 };
 
 struct expectation {
@@ -52,11 +55,11 @@ struct cfg {
 	const char *datadir;
 
 	struct expumap *expumaps;
-	struct fontenc *fontencs;
+	struct fontspec *fontspecs;
 	struct testcase *testcases;
 
 	size_t n_expumaps;
-	size_t n_fontencs;
+	size_t n_fontspecs;
 	size_t n_testcases;
 
 	int fm_version;
@@ -97,15 +100,15 @@ static void cleanup(void)
 		}
 		free(cfg.testcases);
 	}
-	if (cfg.fontencs != NULL) {
+	if (cfg.fontspecs != NULL) {
 		size_t i;
 
-		for (i = 0; i < cfg.n_fontencs; i++) {
-			free(cfg.fontencs[i].encoding);
-			free(cfg.fontencs[i].fontname);
-			free(cfg.fontencs[i].filepath);
+		for (i = 0; i < cfg.n_fontspecs; i++) {
+			free(cfg.fontspecs[i].encoding);
+			free(cfg.fontspecs[i].fontname);
+			free(cfg.fontspecs[i].filepath);
 		}
-		free(cfg.fontencs);
+		free(cfg.fontspecs);
 	}
 
 	if (cfg.expumaps != NULL) {
@@ -397,11 +400,12 @@ static void parse_directive(struct cfg *cfg, char *linecpy, size_t len)
 	}
 }
 
-static void parse_encoding(struct cfg *cfg, char *linecpy, size_t len)
+static void parse_fontspec(struct cfg *cfg, char *linecpy, size_t len)
 {
 	char *p, *s;
 	const char *font = NULL, *encoding = NULL, *file = NULL;
-	struct fontenc *fe;
+	const char *is_symbol = NULL, *has_encoding = NULL;
+	struct fontspec *fs;
 
 	for (p = s = linecpy; p < linecpy+len; p++) {
 		if (*p == ' ' || *p == '\t') {
@@ -413,35 +417,43 @@ static void parse_encoding(struct cfg *cfg, char *linecpy, size_t len)
 					encoding = s;
 				else if (file == NULL)
 					file = s;
+				else if (is_symbol == NULL)
+					is_symbol = s;
+				else if (has_encoding == NULL)
+					has_encoding = s;
 			}
 			s = p+1;
 		}
 	}
-	if (file == NULL)
-		file = s;
+	if (has_encoding == NULL)
+		has_encoding = s;
 
 	assert(font != NULL);
 	assert(encoding != NULL);
 	assert(file != NULL);
+	assert(is_symbol != NULL);
+	assert(has_encoding != NULL);
 
-	fe = realloc(cfg->fontencs, (cfg->n_fontencs + 1) * sizeof(*fe));
-	assert(fe != NULL);
+	fs = realloc(cfg->fontspecs, (cfg->n_fontspecs + 1) * sizeof(*fs));
+	assert(fs != NULL);
 
-	cfg->fontencs = fe;
-	cfg->fontencs[cfg->n_fontencs].fontname = strdup(font);
-	assert(cfg->fontencs[cfg->n_fontencs].fontname != NULL);
-	cfg->fontencs[cfg->n_fontencs].encoding = strdup(encoding);
-	assert(cfg->fontencs[cfg->n_fontencs].encoding != NULL);
+	cfg->fontspecs = fs;
+	fs = &cfg->fontspecs[cfg->n_fontspecs];
 
-	cfg->fontencs[cfg->n_fontencs].filepath = malloc(
-			strlen(cfg->datadir) + strlen(file) + 2);
-	assert(cfg->fontencs[cfg->n_fontencs].filepath != NULL);
-	strcpy(cfg->fontencs[cfg->n_fontencs].filepath, cfg->datadir);
+	fs->fontname = strdup(font);
+	assert(fs->fontname != NULL);
+	fs->encoding = strdup(encoding);
+	assert(fs->encoding != NULL);
+
+	fs->filepath = malloc(strlen(cfg->datadir) + strlen(file) + 2);
+	assert(fs->filepath != NULL);
+	strcpy(fs->filepath, cfg->datadir);
 	//XXX: platform-agnostic dirsep?
-	cfg->fontencs[cfg->n_fontencs].filepath[strlen(cfg->datadir)] = '/';
-	strcpy(cfg->fontencs[cfg->n_fontencs].filepath +
-			strlen(cfg->datadir) + 1, file);
-	cfg->n_fontencs++;
+	fs->filepath[strlen(cfg->datadir)] = '/';
+	strcpy(fs->filepath + strlen(cfg->datadir) + 1, file);
+	fs->is_symbol = (*is_symbol == '1');
+	fs->has_encoding = (*has_encoding == '1');
+	cfg->n_fontspecs++;
 }
 
 static void line_cb(struct cfg *cfg, const char *line, size_t len)
@@ -459,7 +471,7 @@ static void line_cb(struct cfg *cfg, const char *line, size_t len)
 	if (line[0] == '%')
 		parse_directive(cfg, linecpy, len);
 	else
-		parse_encoding(cfg, linecpy, len);
+		parse_fontspec(cfg, linecpy, len);
 
 	free(linecpy);
 }
@@ -540,27 +552,31 @@ int main(int argc, const char **argv)
 
 	if (!cfg.preload) {
 		/* Register fonts and encodings */
-		for (i = 0; i < cfg.n_fontencs; i++) {
+		for (i = 0; i < cfg.n_fontspecs; i++) {
 			rufl_test_harness_register_font(
-					cfg.fontencs[i].fontname);
+					cfg.fontspecs[i].fontname);
 			rufl_test_harness_register_encoding(
-					cfg.fontencs[i].encoding);
+					cfg.fontspecs[i].encoding);
 		}
 	}
 	/* Configure font glyph mappings */
-	for (i = 0; i < cfg.n_fontencs; i++) {
+	for (i = 0; i < cfg.n_fontspecs; i++) {
 		if (cfg.fm_ucs) {
 			/* UCS mode: sparse map */
 			rufl_test_harness_set_font_glyph_map(
-					cfg.fontencs[i].fontname,
-					cfg.fontencs[i].filepath);
+					cfg.fontspecs[i].fontname,
+					cfg.fontspecs[i].filepath);
 		} else {
 			/* Legacy mode: encoding file */
 			rufl_test_harness_set_font_encoding(
-					cfg.fontencs[i].fontname,
-					cfg.fontencs[i].encoding,
-					cfg.fontencs[i].filepath);
+					cfg.fontspecs[i].fontname,
+					cfg.fontspecs[i].encoding,
+					cfg.fontspecs[i].filepath);
 		}
+		rufl_test_harness_set_font_properties(
+				cfg.fontspecs[i].fontname,
+				cfg.fontspecs[i].is_symbol,
+				cfg.fontspecs[i].has_encoding);
 	}
 
 	assert(rufl_OK == rufl_init());

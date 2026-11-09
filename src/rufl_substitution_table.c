@@ -972,7 +972,8 @@ static rufl_code create_substitution_table_for_plane(unsigned int plane)
 	num_charsets = 0;
 	for (i = 0; i != rufl_font_list_entries; i++) {
 		charset = rufl_font_list[i].charset;
-		if (!charset) {
+		if (!charset || !rufl_font_list[i].may_substitute) {
+			/* Either no charset or banned from use as substitute */
 			charsets[i] = NULL;
 			continue;
 		}

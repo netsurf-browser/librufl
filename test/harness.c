@@ -16,6 +16,7 @@ static void rufl_test_harness_free(void)
 	size_t ni, ei;
 
 	rufl_test_harness_discard_paint_calls();
+	free(h->font_properties);
 	if (h->glyph_maps != NULL) {
 		for (ni = 0; ni != h->n_font_names; ni++) {
 			free(h->glyph_maps[ni]);
@@ -119,6 +120,28 @@ void rufl_test_harness_register_encoding(const char *encoding)
 
 		h->encodings[h->n_encodings++] = encoding;
 	}
+}
+
+void rufl_test_harness_set_font_properties(const char *fontname,
+		bool is_symbol, bool has_encoding)
+{
+	size_t ni;
+
+	if (h->font_properties == NULL) {
+		h->font_properties = calloc(h->n_font_names,
+				sizeof(*h->font_properties));
+		assert(h->font_properties != NULL);
+	}
+
+	/* Find font index */
+	for (ni = 0; ni < h->n_font_names; ni++) {
+		if (strcmp(h->font_names[ni], fontname) == 0)
+			break;
+	}
+	assert(ni != h->n_font_names);
+
+	h->font_properties[ni].is_symbol = is_symbol;
+	h->font_properties[ni].has_encoding = has_encoding;
 }
 
 void rufl_test_harness_set_font_encoding(const char *fontname,
