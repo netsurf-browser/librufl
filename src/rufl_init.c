@@ -50,6 +50,12 @@ bool rufl_log_got_start_time;
 time_t rufl_log_start_time;
 #endif
 
+/* A bounded string type */
+typedef struct {
+	const char *ptr;
+	size_t len;
+} rufl_str;
+
 /** An entry in rufl_weight_table. */
 struct rufl_weight_table_entry {
 	const char *name;
@@ -317,23 +323,102 @@ rufl_code rufl_init_font_list(void)
 	return rufl_OK;
 }
 
+static rufl_code rufl_init_categorise_font(const char *identifier,
+		char prefix[1024], char *prefix_end,
+		struct rufl_font_list_entry *f)
+{
+	const char *dot;
+	struct rufl_weight_table_entry *entry;
+	fileswitch_object_type obj_type;
+
+	/* Determine if this font is eligible fo use in subsitution */
+	/* Look for an IntMetrics file */
+	strncpy(prefix_end, "IntMetrics", 1024 - (prefix_end - prefix) - 1);
+	prefix[1024 - 1] = 0;
+
+	rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
+			0, 0, 0, 0, 0);
+	if (rufl_fm_error) {
+		LOG("xosfile_read_stamped_no_path: 0x%x: %s",
+				rufl_fm_error->errnum, rufl_fm_error->errmess);
+		return rufl_IO_ERROR;
+	}
+
+	if (obj_type == osfile_IS_FILE) {
+		/* An IntMetrics file exists, so this is a symbol font.
+		 * Does it have an Encoding file? */
+		strncpy(prefix_end, "Encoding",
+				1024 - (prefix_end - prefix) - 1);
+		prefix[1024 - 1] = 0;
+
+		rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
+				0, 0, 0, 0, 0);
+		if (rufl_fm_error) {
+			LOG("xosfile_read_stamped_no_path: 0x%x: %s",
+					rufl_fm_error->errnum,
+					rufl_fm_error->errmess);
+			return rufl_IO_ERROR;
+		}
+
+		/* Many "symbol" fonts have no Encoding file so the charset
+		 * determined by scanning (or loaded from the cache) will
+		 * reflect the contents of the /Default (UCS FM) or Latin1
+		 * (old FM) encodings. This is as good an answer as anything
+		 * for this font itself but mark it ineligible for inclusion
+		 * in the substitution tables if it has no Encoding file
+		 * (as the charset is speculative, at best) */
+		f->may_substitute = (obj_type == osfile_IS_FILE);
+	} else {
+		/* No IntMetrics file, so this is a language font.
+		 * These are always eligible for substitution. */
+		f->may_substitute = true;
+	}
+
+	/* Determine weight and slant by inspecting the identifier. */
+	dot = strchr(identifier, '.');
+	while (dot) {
+		rufl_str part;
+		part.ptr = dot + 1;
+		dot = strchr(part.ptr, '.');
+		part.len = dot ? (size_t) (dot - part.ptr) : strlen(part.ptr);
+
+		if (strncasecmp(part.ptr, "Italic", part.len) == 0 ||
+				strncasecmp(part.ptr, "Oblique",
+					part.len) == 0) {
+			f->slant = 1;
+			continue;
+		}
+		entry = bsearch(&part, rufl_weight_table,
+				sizeof rufl_weight_table /
+				sizeof rufl_weight_table[0],
+				sizeof rufl_weight_table[0],
+				rufl_weight_table_cmp);
+		if (entry)
+			f->weight = entry->weight;
+		else
+			f->special = 1;  /* unknown weight or style */
+	}
+	if (!f->weight)
+		f->weight = 4;
+	f->weight--;
+
+	return rufl_OK;
+}
 
 rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 {
 	struct rufl_font_list_entry *font_list;
 	char *dot;
 	const char **family_list;
-	const char *family, *part;
-	unsigned int weight = 0;
-	unsigned int slant = 0;
-	bool special = false, may_substitute = false;
+	const char *family;
 	struct rufl_family_map_entry *family_map;
+	struct rufl_family_map_entry *e;
+	struct rufl_font_list_entry *f;
 	unsigned int i;
-	struct rufl_weight_table_entry *entry;
 	char prefix[1024];
 	char *prefix_end;
 	font_f font;
-	fileswitch_object_type obj_type;
+	rufl_code err;
 
 	/* Open the font with no explicit encoding (it doesn't matter
 	 * for our needs here -- we only want to read its prefix) */
@@ -362,56 +447,14 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	/* Done with font handle */
 	xfont_lose_font(font);
 
-	/* Look for an IntMetrics file */
-	strncpy(prefix_end, "IntMetrics",
-			sizeof prefix - (prefix_end - prefix) - 1);
-	prefix[sizeof prefix - 1] = 0;
-
-	rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
-			0, 0, 0, 0, 0);
-	if (rufl_fm_error) {
-		LOG("xosfile_read_stamped_no_path: 0x%x: %s",
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
-		return rufl_OK;
-	}
-
-	if (obj_type == osfile_IS_FILE) {
-		/* An IntMetrics file exists, so this is a symbol font.
-		 * Does it have an Encoding file? */
-		strncpy(prefix_end, "Encoding",
-				sizeof prefix - (prefix_end - prefix) - 1);
-		prefix[sizeof prefix - 1] = 0;
-
-		rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
-				0, 0, 0, 0, 0);
-		if (rufl_fm_error) {
-			LOG("xosfile_read_stamped_no_path: 0x%x: %s",
-					rufl_fm_error->errnum,
-					rufl_fm_error->errmess);
-			return rufl_OK;
-		}
-
-		/* Many "symbol" fonts have no Encoding file so the charset
-		 * determined by scanning (or loaded from the cache) will
-		 * reflect the contents of the /Default (UCS FM) or Latin1
-		 * (old FM) encodings. This is as good an answer as anything
-		 * for this font itself but mark it ineligible for inclusion
-		 * in the substitution tables if it has no Encoding file
-		 * (as the charset is speculative, at best) */
-		may_substitute = (obj_type == osfile_IS_FILE);
-	} else {
-		/* No IntMetrics file, so this is a language font.
-		 * These are always eligible for substitution. */
-		may_substitute = true;
-	}
-
 	/* Check that:
 	 * a) it's not a RiScript generated font
 	 * b) it's not a TeX font	 */
 
-	if (strstr(prefix, "RiScript") || strstr(prefix, "!TeXFonts"))
+	if (strstr(prefix, "RiScript") || strstr(prefix, "!TeXFonts")) {
 		/* Ignore this font */
 		return rufl_OK;
+	}
 
 	/* add identifier to rufl_font_list */
 	font_list = realloc(rufl_font_list, sizeof rufl_font_list[0] *
@@ -419,12 +462,19 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	if (!font_list)
 		return rufl_OUT_OF_MEMORY;
 	rufl_font_list = font_list;
-	rufl_font_list[rufl_font_list_entries].identifier = strdup(identifier);
-	if (!rufl_font_list[rufl_font_list_entries].identifier)
+	f = &rufl_font_list[rufl_font_list_entries];
+	memset(f, 0, sizeof(*f));
+
+	err = rufl_init_categorise_font(identifier, prefix, prefix_end, f);
+	if (err != rufl_OK) {
+		/* Categorisation failed: ignore this font */
+		return rufl_OK;
+	}
+
+	f->identifier = strdup(identifier);
+	if (!f->identifier)
 		return rufl_OUT_OF_MEMORY;
-	rufl_font_list[rufl_font_list_entries].charset = NULL;
-	rufl_font_list[rufl_font_list_entries].umap = NULL;
-	rufl_font_list[rufl_font_list_entries].num_umaps = 0;
+
 	rufl_font_list_entries++;
 
 	/* For historic reasons, RUfl family names are localized.
@@ -440,32 +490,6 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	family = local_name;
 	if (dot)
 		*dot = 0;
-
-	/* Determine weight and slant by inspecting the identifier. */
-	dot = strchr(identifier, '.');
-	while (dot) {
-		part = dot + 1;
-		dot = strchr(part, '.');
-		if (dot)
-			*dot = 0;
-		if (strcasecmp(part, "Italic") == 0 ||
-				strcasecmp(part, "Oblique") == 0) {
-			slant = 1;
-			continue;
-		}
-		entry = bsearch(part, rufl_weight_table,
-				sizeof rufl_weight_table /
-				sizeof rufl_weight_table[0],
-				sizeof rufl_weight_table[0],
-				rufl_weight_table_cmp);
-		if (entry)
-			weight = entry->weight;
-		else
-			special = true;  /* unknown weight or style */
-	}
-	if (!weight)
-		weight = 4;
-	weight--;
 
 	if (rufl_family_list_entries == 0 || strcasecmp(family,
 			rufl_family_list[rufl_family_list_entries - 1]) != 0) {
@@ -495,20 +519,14 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 					NO_FONT;
 		rufl_family_list_entries++;
 	}
+	e = &rufl_family_map[rufl_family_list_entries - 1];
 
-	struct rufl_family_map_entry *e =
-			&rufl_family_map[rufl_family_list_entries - 1];
+	f->family = rufl_family_list_entries - 1;
+
 	/* prefer fonts with no unknown weight or style in their name, so that,
 	 * for example, Alps.Light takes priority over Alps.Cond.Light */
-	if (e->font[weight][slant] == NO_FONT || !special)
-		e->font[weight][slant] = rufl_font_list_entries - 1;
-
-	rufl_font_list[rufl_font_list_entries - 1].family =
-			rufl_family_list_entries - 1;
-	rufl_font_list[rufl_font_list_entries - 1].weight = weight;
-	rufl_font_list[rufl_font_list_entries - 1].slant = slant;
-	rufl_font_list[rufl_font_list_entries - 1].may_substitute =
-			may_substitute;
+	if (e->font[f->weight][f->slant] == NO_FONT || !f->special)
+		e->font[f->weight][f->slant] = rufl_font_list_entries - 1;
 
 	return rufl_OK;
 }
@@ -516,9 +534,9 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 
 int rufl_weight_table_cmp(const void *keyval, const void *datum)
 {
-	const char *key = keyval;
+	const rufl_str *key = keyval;
 	const struct rufl_weight_table_entry *entry = datum;
-	return strcasecmp(key, entry->name);
+	return strncasecmp(key->ptr, entry->name, key->len);
 }
 
 static struct rufl_character_set *rufl_init_alloc_plane(uint8_t index)

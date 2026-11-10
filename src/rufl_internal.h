@@ -141,6 +141,8 @@ struct rufl_font_list_entry {
 	uint32_t slant: 1;
 	/** Whether this font can be used for substitution (0 or 1) */
 	uint32_t may_substitute: 1;
+	/* Whether the identifier has components unknown to RUfl (0 or 1) */
+	uint32_t special : 1;
 };
 /** List of all available fonts. */
 extern struct rufl_font_list_entry *rufl_font_list;
