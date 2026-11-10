@@ -272,6 +272,71 @@ rufl_code rufl_init(void)
 }
 
 
+static int rufl_font_list_entry_cmp(const void *keyval, const void *datum)
+{
+	const struct rufl_font_list_entry *key = keyval;
+	const struct rufl_font_list_entry *entry = datum;
+	return strcasecmp(key->identifier, entry->identifier);
+}
+
+
+/**
+ * Normalise the family and font lists
+ */
+static void rufl_init_normalise_lists(void)
+{
+	const char *prev_family = NULL;
+	size_t prev_famidx = 0;
+
+	/* The family list is already sorted because it contains
+	 * local names as returned by Font_ListFonts */
+
+	/* Sort the font list by identifier */
+	qsort(rufl_font_list, rufl_font_list_entries, sizeof rufl_font_list[0],
+			rufl_font_list_entry_cmp);
+
+	/* Resolve indices now that the data is in place */
+	for (size_t fidx = 0; fidx < rufl_font_list_entries; fidx++) {
+		size_t famidx;
+		struct rufl_family_map_entry *e;
+		struct rufl_font_list_entry *f = &rufl_font_list[fidx];
+		const char *family = (const char *) (void *) f->charset;
+
+		/* Clean up evidence of temporary use of the charset field */
+		f->charset = NULL;
+
+		/* Find the family index */
+		if (family == prev_family) {
+			/* Unchanged from the previous one */
+			famidx = prev_famidx;
+		} else {
+			/* Family has changed: look for it */
+			for (famidx = 0; famidx < rufl_family_list_entries;
+					famidx++) {
+				if (rufl_family_list[famidx] == family)
+					break;
+			}
+			assert(famidx < rufl_family_list_entries);
+
+			/* Save the answer for next time */
+			prev_family = family;
+			prev_famidx = famidx;
+		}
+
+		/* Insert the family index into the font */
+		f->family = famidx;
+
+		/* Insert this font into the family map, preferring fonts
+		 * with no unknown weight or style in their name, so that,
+		 * for example, Alps.Light takes priority over Alps.Cond.Light
+		 */
+		e = &rufl_family_map[famidx];
+		if (e->font[f->weight][f->slant] == NO_FONT || !f->special)
+			e->font[f->weight][f->slant] = fidx;
+	}
+}
+
+
 /**
  * Build list of font in rufl_font_list and list of font families
  * in rufl_family_list.
@@ -320,8 +385,11 @@ rufl_code rufl_init_font_list(void)
 		}
 	}
 
+	rufl_init_normalise_lists();
+
 	return rufl_OK;
 }
+
 
 static rufl_code rufl_init_categorise_font(const char *identifier,
 		char prefix[1024], char *prefix_end,
@@ -412,7 +480,6 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	const char **family_list;
 	const char *family;
 	struct rufl_family_map_entry *family_map;
-	struct rufl_family_map_entry *e;
 	struct rufl_font_list_entry *f;
 	unsigned int i;
 	char prefix[1024];
@@ -519,18 +586,18 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 					NO_FONT;
 		rufl_family_list_entries++;
 	}
-	e = &rufl_family_map[rufl_family_list_entries - 1];
 
-	f->family = rufl_family_list_entries - 1;
-
-	/* prefer fonts with no unknown weight or style in their name, so that,
-	 * for example, Alps.Light takes priority over Alps.Cond.Light */
-	if (e->font[f->weight][f->slant] == NO_FONT || !f->special)
-		e->font[f->weight][f->slant] = rufl_font_list_entries - 1;
+	/* Temporarily save the family name pointer in the font's charset
+	 * field. This allows us to sort both lists and then fill in the
+	 * array indices afterwards. This is safe because the charset field
+	 * will not be used until after we have constructed these lists
+	 * (and after the list construction the pointers are guaranteed
+	 * to be NULL). */
+	f->charset = (struct rufl_character_set *) (void *) rufl_family_list[
+			rufl_family_list_entries - 1];
 
 	return rufl_OK;
 }
-
 
 int rufl_weight_table_cmp(const void *keyval, const void *datum)
 {
@@ -1931,8 +1998,8 @@ rufl_code rufl_load_cache(void)
 		}
 
 		/* put in rufl_font_list */
-		entry = lfind(identifier, rufl_font_list,
-				&rufl_font_list_entries,
+		entry = bsearch(identifier, rufl_font_list,
+				rufl_font_list_entries,
 				sizeof rufl_font_list[0], rufl_font_list_cmp);
 		if (entry) {
 			entry->charset = charset;
