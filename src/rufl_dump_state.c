@@ -5,7 +5,9 @@
  * Copyright 2006 James Bursa <james@semichrome.net>
  */
 
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "rufl_internal.h"
 
 
@@ -46,21 +48,72 @@ void rufl_dump_state(bool verbose)
 
 	printf("rufl_family_list:\n");
 	for (i = 0; i != rufl_family_list_entries; i++) {
+		struct rufl_family_map_entry_storage k;
+		struct rufl_family_map_entry_storage *e;
+		int32_t weight = -1, slant = -1;
+
 		printf("  %u \"%s\"\n", i, rufl_family_list[i]);
-		for (j = 0; j != 9; j++) {
-			struct rufl_family_map_entry *e = &rufl_family_map[i];
-			printf("    %u ", j);
-			if (e->font[j][0] == NO_FONT)
-				printf("- ");
-			else
-				printf("\"%s\" ", rufl_font_list[e->font[j][0]].
-						identifier);
-			if (e->font[j][1] == NO_FONT)
-				printf("- ");
-			else
-				printf("\"%s\" ", rufl_font_list[e->font[j][1]].
-						identifier);
-			printf("\n");
+
+		rufl_family_map_entry_populate(&k, i, 0, 0, 0);
+
+		/* Find an entry that matches this family */
+		e = rufl_family_map_find(&k, rufl_family_map_family_cmp);
+		/* Wind back to the first entry for this family */
+		while (e != NULL) {
+			struct rufl_family_map_entry_storage *prev =
+					rufl_family_map_prev(e);
+			if (prev == NULL || rufl_family_map_family_cmp(
+					prev, e) != 0)
+				break;
+			e = prev;
+		}
+		while (e != NULL && rufl_family_map_family_cmp(&k, e) == 0) {
+			struct rufl_family_map_entry_storage *next =
+					rufl_family_map_next(e);
+			uint32_t w, s, font;
+
+			rufl_family_map_entry_parse(e, NULL, &w, &s, &font);
+
+			while (weight < (int32_t) w) {
+				if (slant == 0) {
+					/* Last record was unslanted */
+					printf("- \n");
+					slant = 1;
+				} else {
+					/* Last record was slanted */
+					weight++;
+					slant = 0;
+					if (weight < (int32_t) w)
+						printf("    %u - ", weight);
+				}
+			}
+			if (s == 0) {
+				/* This record is unslanted */
+				printf("    %u \"%s\" ", weight,
+					rufl_font_list[font].identifier);
+			} else {
+				/* This record is slanted */
+				printf("\"%s\" \n",
+					rufl_font_list[font].identifier);
+			}
+
+			weight = w;
+			slant = s;
+
+			e = next;
+		}
+		while (weight < 9) {
+			if (slant == 0) {
+				/* Last record was unslanted */
+				printf("- \n");
+				slant = 1;
+			} else {
+				/* Last record was slanted */
+				weight++;
+				slant = 0;
+				if (weight < 9)
+					printf("    %u - ", weight);
+			}
 		}
 	}
 

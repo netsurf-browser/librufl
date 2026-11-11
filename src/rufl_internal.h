@@ -149,16 +149,14 @@ extern struct rufl_font_list_entry *rufl_font_list;
 /** Number of entries in rufl_font_list. */
 extern size_t rufl_font_list_entries;
 
-
-/** An entry in rufl_family_map. */
-struct rufl_family_map_entry {
-	/** This style does not exist in this family. */
-#	define NO_FONT UINT_MAX
-	/** Map from weight and slant to index in rufl_font_list, or NO_FONT. */
-	uint32_t font[9][2];
+/** "Public" family map entry type. Assume nothing */
+struct rufl_family_map_entry_storage {
+	uint32_t val1, val2;
 };
-/** Map from font family to fonts, rufl_family_list_entries entries. */
-extern struct rufl_family_map_entry *rufl_family_map;
+/** Map from font family to fonts. */
+extern struct rufl_family_map_entry_storage *rufl_family_map;
+/** Number of entries in rufl_family_map */
+extern size_t rufl_family_map_entries;
 
 
 /** No font contains this character. */
@@ -195,6 +193,23 @@ extern bool rufl_old_font_manager;
 
 /** Font manager supports background blending */
 extern bool rufl_can_background_blend;
+
+int rufl_family_map_cmp(const void *e1, const void *e2);
+int rufl_family_map_family_cmp(const void *e1, const void *e2);
+void rufl_family_map_entry_populate(struct rufl_family_map_entry_storage *e,
+		uint32_t family, uint32_t weight, uint32_t slanted,
+		uint32_t font);
+void rufl_family_map_entry_parse(const struct rufl_family_map_entry_storage *e,
+		uint32_t *family, uint32_t *weight, uint32_t *slanted,
+		uint32_t *font);
+struct rufl_family_map_entry_storage *rufl_family_map_prev(
+		const struct rufl_family_map_entry_storage *e);
+struct rufl_family_map_entry_storage *rufl_family_map_next(
+		const struct rufl_family_map_entry_storage *e);
+struct rufl_family_map_entry_storage *rufl_family_map_find(
+		const struct rufl_family_map_entry_storage *k,
+		int (*cmpfunc)(const void *, const void *));
+rufl_code rufl_family_map_append(const struct rufl_family_map_entry_storage *e);
 
 rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 		unsigned int *font);

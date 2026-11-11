@@ -36,7 +36,8 @@ struct rufl_font_list_entry *rufl_font_list = NULL;
 size_t rufl_font_list_entries = 0;
 const char **rufl_family_list = NULL;
 size_t rufl_family_list_entries = 0;
-struct rufl_family_map_entry *rufl_family_map = NULL;
+struct rufl_family_map_entry_storage *rufl_family_map = NULL;
+size_t rufl_family_map_entries = 0;
 os_error *rufl_fm_error = NULL;
 void *rufl_family_menu = NULL;
 struct rufl_cache_entry rufl_cache[rufl_CACHE_SIZE];
@@ -272,6 +273,32 @@ rufl_code rufl_init(void)
 }
 
 
+static rufl_code rufl_init_add_family_map_entry(struct rufl_font_list_entry *f,
+		size_t famidx, size_t fidx)
+{
+	struct rufl_family_map_entry_storage e;
+	struct rufl_family_map_entry_storage *fmentry;
+	rufl_code code = rufl_OK;
+
+	rufl_family_map_entry_populate(&e, famidx, f->weight, f->slant, fidx);
+
+	fmentry = rufl_family_map_find(&e, rufl_family_map_cmp);
+
+	/* Insert this font into the family map, preferring fonts
+	 * with no unknown weight or style in their name, so that,
+	 * for example, Alps.Light takes priority over Alps.Cond.Light
+	 */
+	if (fmentry == NULL) {
+		code = rufl_family_map_append(&e);
+	} else if (!f->special) {
+		rufl_family_map_entry_populate(fmentry, famidx, f->weight,
+				f->slant, fidx);
+	}
+
+	return code;
+}
+
+
 static int rufl_font_list_entry_cmp(const void *keyval, const void *datum)
 {
 	const struct rufl_font_list_entry *key = keyval;
@@ -283,10 +310,11 @@ static int rufl_font_list_entry_cmp(const void *keyval, const void *datum)
 /**
  * Normalise the family and font lists
  */
-static void rufl_init_normalise_lists(void)
+static rufl_code rufl_init_normalise_lists(void)
 {
 	const char *prev_family = NULL;
 	size_t prev_famidx = 0;
+	rufl_code code;
 
 	/* The family list is already sorted because it contains
 	 * local names as returned by Font_ListFonts */
@@ -298,7 +326,6 @@ static void rufl_init_normalise_lists(void)
 	/* Resolve indices now that the data is in place */
 	for (size_t fidx = 0; fidx < rufl_font_list_entries; fidx++) {
 		size_t famidx;
-		struct rufl_family_map_entry *e;
 		struct rufl_font_list_entry *f = &rufl_font_list[fidx];
 		const char *family = (const char *) (void *) f->charset;
 
@@ -326,14 +353,14 @@ static void rufl_init_normalise_lists(void)
 		/* Insert the family index into the font */
 		f->family = famidx;
 
-		/* Insert this font into the family map, preferring fonts
-		 * with no unknown weight or style in their name, so that,
-		 * for example, Alps.Light takes priority over Alps.Cond.Light
-		 */
-		e = &rufl_family_map[famidx];
-		if (e->font[f->weight][f->slant] == NO_FONT || !f->special)
-			e->font[f->weight][f->slant] = fidx;
+		/* Insert into the family map */
+		code = rufl_init_add_family_map_entry(f, famidx, fidx);
+		if (code != rufl_OK) {
+			return code;
+		}
 	}
+
+	return rufl_OK;
 }
 
 
@@ -385,7 +412,11 @@ rufl_code rufl_init_font_list(void)
 		}
 	}
 
-	rufl_init_normalise_lists();
+	code = rufl_init_normalise_lists();
+	if (code != rufl_OK) {
+		LOG("rufl_init_normalise_lists: 0x%x", code);
+		return code;
+	}
 
 	return rufl_OK;
 }
@@ -475,15 +506,13 @@ static rufl_code rufl_init_categorise_font(const char *identifier,
 
 rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 {
+	char prefix[1024];
+	char *prefix_end;
 	struct rufl_font_list_entry *font_list;
 	char *dot;
 	const char **family_list;
 	const char *family;
-	struct rufl_family_map_entry *family_map;
 	struct rufl_font_list_entry *f;
-	unsigned int i;
-	char prefix[1024];
-	char *prefix_end;
 	font_f font;
 	rufl_code err;
 
@@ -568,22 +597,11 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 			return rufl_OUT_OF_MEMORY;
 		rufl_family_list = family_list;
 
-		family_map = realloc(rufl_family_map,
-				sizeof rufl_family_map[0] *
-				(rufl_family_list_entries + 1));
-		if (!family_map)
-			return rufl_OUT_OF_MEMORY;
-		rufl_family_map = family_map;
-
 		family = strdup(family);
 		if (!family)
 			return rufl_OUT_OF_MEMORY;
 
 		rufl_family_list[rufl_family_list_entries] = family;
-		for (i = 0; i != 9; i++)
-			rufl_family_map[rufl_family_list_entries].font[i][0] =
-			rufl_family_map[rufl_family_list_entries].font[i][1] =
-					NO_FONT;
 		rufl_family_list_entries++;
 	}
 

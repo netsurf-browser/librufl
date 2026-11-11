@@ -41,6 +41,7 @@ void rufl_quit(void)
 	free(rufl_family_list);
 	free(rufl_family_map);
 	rufl_family_map = NULL;
+	rufl_family_map_entries = 0;
 	rufl_family_list = NULL;
 	rufl_family_list_entries = 0;
 
