@@ -1,4 +1,6 @@
 #include <ftw.h>
+#include <libgen.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -7,6 +9,9 @@
 
 #include "harness.h"
 #include "testutils.h"
+
+/* Set to UINT_MAX to ingest them all (warning: takes ~10s) */
+#define MAXFONTS 300
 
 static char template[] = "/tmp/manyfontsXXXXXX";
 static const char *ptmp = NULL;
@@ -33,8 +38,12 @@ static void cleanup(void)
 
 int main(int argc, const char **argv)
 {
-	char *names[300];
-	int x;
+	char datadir[4096];
+	char wbuf[4096];
+	FILE *fp;
+	char **names = NULL;
+	size_t nnames = 0;
+	size_t nleft = 0;
 
 	assert(2 == argc);
 
@@ -43,19 +52,73 @@ int main(int argc, const char **argv)
 	atexit(cleanup);
 	assert(0 == chdir(ptmp));
 
+	strncpy(datadir, argv[1], sizeof(datadir) - 1);
+	datadir[sizeof(datadir)-1] = '\0';
+
+	/* Build path to font catalog */
+	dirname(dirname(datadir));
+	strcat(datadir, "/FontCat");
+
 	rufl_test_harness_init(380, true, true);
 
-	for (x = 0; x < 300; x++) {
+	fp = fopen(datadir, "r");
+	assert(NULL != fp);
+
+	while (!feof(fp)) {
+		char buf[2048];
+		const char *p, *s;
+		size_t nread = fread(buf, 1, sizeof(buf), fp);
+		if (nread != sizeof(buf)) {
+			assert(ferror(fp) == 0);
+		}
+		memcpy(wbuf + nleft, buf, nread);
+		nleft += nread;
+		for (p = s = wbuf; p < wbuf + nleft; p++) {
+			if (*p == '\n') {
+				if (nnames < MAXFONTS) {
+					char **tmp = realloc(names,
+						(nnames+1) * sizeof(names[0]));
+					assert(NULL != tmp);
+					names = tmp;
+					names[nnames] = malloc(p - s + 1);
+					assert(NULL != names[nnames]);
+					memcpy(names[nnames], s, p - s);
+					names[nnames][p - s] = '\0';
+					nnames++;
+				}
+				s = p+1;
+			}
+		}
+		if (s != wbuf + nleft) {
+			memmove(wbuf, s, p - s);
+			nleft = p - s;
+		} else {
+			nleft = 0;
+		}
+		assert(nleft < sizeof(buf));
+	}
+	assert(nleft == 0);
+	fclose(fp);
+
+	while (nnames < 300) {
 		char buf[64];
-		sprintf(buf, "Font%03d", x);
-		names[x] = strdup(buf);
-		rufl_test_harness_register_font(names[x]);
+		char **tmp = realloc(names, (nnames+1) * sizeof(names[0]));
+		assert(NULL != tmp);
+		names = tmp;
+		sprintf(buf, "Font%03zu", nnames);
+		names[nnames] = strdup(buf);
+		nnames++;
+	}
+
+	for (nleft = 0; nleft < nnames; nleft++) {
+		rufl_test_harness_register_font(names[nleft]);
 	}
 	rufl_test_harness_set_font_glyph_map(names[0], argv[1]);
 
 	assert(rufl_OK == rufl_init());
 	assert(NULL == rufl_fm_error);
-	assert(303 == rufl_family_list_entries);
+	assert(3 <= rufl_family_list_entries &&
+			rufl_family_list_entries <= nnames + 3);
 	assert(NULL != rufl_family_menu);
 
 	rufl_dump_state(true);
@@ -65,14 +128,16 @@ int main(int argc, const char **argv)
 	/* Reinit -- should load cache */
 	assert(rufl_OK == rufl_init());
 	assert(NULL == rufl_fm_error);
-	assert(303 == rufl_family_list_entries);
+	assert(3 <= rufl_family_list_entries &&
+			rufl_family_list_entries <= nnames + 3);
 	assert(NULL != rufl_family_menu);
 	/* Done for real this time */
 	rufl_quit();
 
-	for (x = 0; x < 300; x++) {
-		free(names[x]);
+	for (nleft = 0; nleft < nnames; nleft++) {
+		free(names[nleft]);
 	}
+	free(names);
 
 	printf("PASS\n");
 

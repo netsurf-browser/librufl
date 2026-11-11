@@ -601,7 +601,6 @@ Barry
 Basia
 Basil.Fawlty
 Baskervill.Bold
-BASKERVILL.BOLD
 Baskervill.Bold.Italic
 Baskerville
 Baskerville.Bold
@@ -789,7 +788,6 @@ BitSlanted.SemiBold
 BitSlanted.UltraBold
 Black
 BLACK.ADDER.II.NORMAL
-Black.Bold
 BLACK.BOLD
 BLACK.BOX
 BLACK.CHANCERY
@@ -1056,7 +1054,6 @@ Bradford
 Brady
 Brady.Bold
 Braille
-BRAILLE
 Branded
 Branded.Oblique
 Brassfield
@@ -1856,10 +1853,6 @@ Coronar.Bold
 CORONAR.ITAL
 Coronar.Italic
 CORONET.SEMI.BOLD.ITALIC
-Corpus.Bold
-Corpus.Bold.Oblique
-Corpus.Medium
-Corpus.Medium.Oblique
 Cosmic
 CosmicTwo
 COSMIC.TWO
@@ -2550,7 +2543,6 @@ Era.Oblique
 Eras
 ERAS.BLACK.SEMI.BOLD
 Eras.Bold
-ERAS.BOLD
 Eras.Bold.Oblique
 ERAS.LIGHT.LIGHT
 ERAS.MEDIUM.MEDIUM
@@ -2588,7 +2580,6 @@ Escapade
 Escapade.Oblique
 Escape
 Escape.Oblique
-ESpheres
 ESPHERES
 ESpheres.Bold
 Essay
@@ -2825,7 +2816,6 @@ Flemish.Oblique
 Fleurons
 Flier
 Flier.Cond
-Flintstone
 FlintStone
 FlintStone.Bold
 FlintStone.Bold.Oblique
@@ -3241,7 +3231,6 @@ Galaxy.Extnd.Bold.Oblique
 Galaxy.Extnd.Oblique
 Galaxy.Oblique
 GALLAUDET
-Galledis
 GALLEDIS
 Galledis.Oblique
 Galya
@@ -3506,7 +3495,6 @@ Grecian.Extended
 Grecian.Extended.Oblique
 Grecian.Oblique
 Greek
-GREEK
 Greek.Ancient
 Greek.Modern
 GREEK.TYPE
@@ -3660,7 +3648,6 @@ Heather
 HebronCaps
 HEIDELBE.LIGHT
 Heidelberg
-HEIDELBERG
 Heidelstei
 HEIDLEBERG
 Helen
@@ -3828,10 +3815,6 @@ Holman.Extended.Oblique
 Holman.Oblique
 Home
 Home_Away
-Homerton.Bold
-Homerton.Bold.Oblique
-Homerton.Medium
-Homerton.Medium.Oblique
 HOMEWARD.BOUND
 Honest
 Honest.Bold
@@ -5561,7 +5544,6 @@ NEU.SERIF
 Nevada.Light
 NEVILLE.CASUAL.SCRIPT
 New
-NEW
 Newage
 NEWAGE.FONT
 NEWAGE.ITAL
@@ -5615,7 +5597,6 @@ NEWBERRY.EXT
 Newberry.Extended
 NEWBERRY.ITAL
 NEW.Bold
-NEW.BOLD
 NEW.BRUNSWICK.BOLD
 NEW.BRUNSWICK.BOLD.ITALIC
 NEW.BRUNSWICK.ITALIC
@@ -6188,7 +6169,6 @@ OpticalA.Oblique
 OpticalB
 OpticalB.Oblique
 Optima.Bold
-OPTIMA.BOLD
 OPTIMA.BOLD.ITALIC
 Optima.Bold.Oblique
 OPTIMA.ITALIC
@@ -6405,7 +6385,6 @@ Palatine.Smallcaps.Bold
 Palatine.Smallcaps.Bold.Italic
 Palatine.Smallcaps.Italic
 Palatino.Bold
-PALATINO.BOLD
 Palatino.Bold.Italic
 Palatino.Roman
 Palatino.Roman.Italic
@@ -7346,7 +7325,6 @@ ROMANOPOLI.THIN
 Roma.Oblique
 Romaunt
 Romaunt.Oblique
-Romeodn
 ROMEODN
 ROMEODN.ITAL
 Romulus
@@ -8060,7 +8038,6 @@ StempGara.Smallcaps.Oblique
 Stems
 Stems.Oblique
 Stencil
-STENCIL
 STENCIL2
 STENCIL.ITAL
 STENCIL.JNR
@@ -8142,7 +8119,6 @@ Strong.Bold.Oblique
 Strong.Light
 Strong.Light.Oblique
 Strongman
-StrongMan
 Strongman.Bold
 STRONGMAN.BOLD.BOLD
 STRONGMAN.NORMAL
@@ -8324,7 +8300,6 @@ Swz.Light
 Swz.Light.Oblique
 Swz.Oblique
 Symbol
-SYMBOL
 Symbols
 SysError
 SysError.Oblique
@@ -8472,7 +8447,6 @@ Titanic.Oblique
 Titanic.Outline
 Titanic.Outline.Oblique
 TOM
-Tombstone
 TombStone
 TombStone.Narrow
 TombStone.Oblique
@@ -8586,10 +8560,6 @@ Tribe
 Tribe.Bold
 Tribeca
 Tribe.Light
-Trinity.Bold
-Trinity.Bold.Italic
-Trinity.Medium
-Trinity.Medium.Italic
 TrioTri
 TrioTri.Oblique
 Tripoli.Bold
@@ -8926,7 +8896,6 @@ Western
 Western1
 Western1.Oblique
 Western2
-WESTERN2
 Western2.Oblique
 Western3
 Western3.Oblique
@@ -8943,7 +8912,6 @@ Western.Capital
 Western.Capital.Oblique
 Western.Oblique
 WestOrnamt
-Westside
 WestSide
 WESTSIDE2
 WetPaint
