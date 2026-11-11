@@ -30,20 +30,45 @@ typedef enum {
 	rufl_IO_EOF,
 } rufl_code;
 
-/** Font weight and slant. Normal weight is 400, 700 gives the "Bold" weight of
- * fonts. */
+/**
+ * Font style qualifiers.
+ *
+ * The style of a font is comprised of a number of properties,
+ * which may be specified to guide the selection of a font
+ * from its family.
+ */
 typedef enum {
-	rufl_WEIGHT_100 = 1,
-	rufl_WEIGHT_200 = 2,
-	rufl_WEIGHT_300 = 3,
-	rufl_WEIGHT_400 = 4,
-	rufl_WEIGHT_500 = 5,
-	rufl_WEIGHT_600 = 6,
-	rufl_WEIGHT_700 = 7,
-	rufl_WEIGHT_800 = 8,
-	rufl_WEIGHT_900 = 9,
-	rufl_SLANTED = 0x100,
+	/* Weight values (choose one)
+	 *
+	 * Normal weight is 400, 700 gives the "Bold" weight of fonts.
+	 */
+	rufl_WEIGHT_100   = 0x0001,
+	rufl_WEIGHT_200   = 0x0002,
+	rufl_WEIGHT_300   = 0x0003,
+	rufl_WEIGHT_400   = 0x0004,
+	rufl_WEIGHT_500   = 0x0005,
+	rufl_WEIGHT_600   = 0x0006,
+	rufl_WEIGHT_700   = 0x0007,
+	rufl_WEIGHT_800   = 0x0008,
+	rufl_WEIGHT_900   = 0x0009,
+
+	/* Glyph widths (choose one).
+	 *
+	 * Normal width is 300. 200 is Condensed; 400 is Extended
+	 */
+	rufl_GWIDTH_100   = 0x0010,
+	rufl_GWIDTH_200   = 0x0020,
+	rufl_GWIDTH_300   = 0x0030,
+	rufl_GWIDTH_400   = 0x0040,
+	rufl_GWIDTH_500   = 0x0050,
+
+	/* Binary flags (choose as many as required) */
+	rufl_FLAG_SLANTED = 0x0100, /* Slanted (i.e. Italic / Oblique) */
+	rufl_FLAG_CAPS    = 0x0200, /* Use capitals for lower-case */
 } rufl_style;
+
+/* backwards compatibility */
+#define rufl_SLANTED rufl_FLAG_SLANTED
 
 /** rufl_paint flags */
 #define rufl_BLEND_FONT 0x01
