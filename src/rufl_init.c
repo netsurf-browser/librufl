@@ -66,32 +66,114 @@ struct rufl_weight_table_entry {
 /** Map from font name part to font weight. Must be case-insensitive sorted by
  * name. */
 const struct rufl_weight_table_entry rufl_weight_table[] = {
-	{ "Black", 9 },
-	{ "Bold", 7 },
-	{ "Book", 3 },
-	{ "Demi", 6 },
-	{ "DemiBold", 6 },
-	{ "Extra", 8 },
-	{ "ExtraBlack", 9 },
-	{ "ExtraBold", 8 },
-	{ "ExtraLight", 1 },
-	{ "Heavy", 8 },
-	{ "Light", 2 },
-	{ "MedBold", 6 },
-	{ "Medium", 5 },
-	{ "Regular", 4 },
-	{ "Semi", 6 },
-	{ "SemiBold", 6 },
-	{ "SemiLight", 3 },
-	{ "Thin", 1 },
-	{ "UltraBlack", 9 },
-	{ "UltraBold", 9 },
+	{ "BD", rufl_WEIGHT_700 },
+	{ "BLA", rufl_WEIGHT_900 },
+	{ "Black", rufl_WEIGHT_900 },
+	{ "BLD", rufl_WEIGHT_700 },
+	{ "BLK", rufl_WEIGHT_900 },
+	{ "Bold", rufl_WEIGHT_700 },
+	{ "Book", rufl_WEIGHT_300 },
+	{ "Demi", rufl_WEIGHT_600 },
+	{ "DemiBold", rufl_WEIGHT_600 },
+	{ "DemiLight", rufl_WEIGHT_300 },
+	{ "Extra", rufl_WEIGHT_800 },
+	{ "ExtraBlack", rufl_WEIGHT_900 },
+	{ "ExtraBold", rufl_WEIGHT_800 },
+	{ "ExtraLight", rufl_WEIGHT_100 },
+	{ "Heavy", rufl_WEIGHT_800 },
+	{ "Light", rufl_WEIGHT_200 },
+	{ "MedBold", rufl_WEIGHT_600 },
+	{ "Medium", rufl_WEIGHT_500 },
+	{ "Normal", rufl_WEIGHT_400 },
+	{ "Regular", rufl_WEIGHT_400 },
+	{ "Semi", rufl_WEIGHT_600 },
+	{ "SemiBold", rufl_WEIGHT_600 },
+	{ "SemiLight", rufl_WEIGHT_300 },
+	{ "Thick", rufl_WEIGHT_900 },
+	{ "Thin", rufl_WEIGHT_100 },
+	{ "Ultra", rufl_WEIGHT_900 },
+	{ "UltraBlack", rufl_WEIGHT_900 },
+	{ "UltraBold", rufl_WEIGHT_900 },
+	{ "UltraLight", rufl_WEIGHT_100 },
+	{ "UltraThin", rufl_WEIGHT_100 },
 };
 
+/** Map from modifier name to delta. Must be case-insensitive sorted by name */
+const struct rufl_weight_table_entry rufl_weight_modifier_table[] =
+{
+	{ "Demi", (unsigned int) -1 },
+	{ "Extra", 1 },
+	{ "Semi", (unsigned int) -1 },
+	{ "Ultra", 2 },
+};
+
+/** Map from glyph width to delta. Must be case-insensitive sorted by name */
+const struct rufl_weight_table_entry rufl_weight_adjustment_table[] =
+{
+	{ "Narrow", (unsigned int) -1 },
+};
+
+/** Map from font name part to glyph width. Must be case-insensitive sorted by
+ * name */
+const struct rufl_weight_table_entry rufl_glyph_width_table[] = {
+	{ "Broad", rufl_GWIDTH_400 },
+	{ "CND", rufl_GWIDTH_200 },
+	{ "Comp", rufl_GWIDTH_200 },
+	{ "Compressed", rufl_GWIDTH_200 },
+	{ "Cond", rufl_GWIDTH_200 },
+	{ "Condensed", rufl_GWIDTH_200 },
+	{ "Ext", rufl_GWIDTH_400 },
+	{ "Extend", rufl_GWIDTH_400 },
+	{ "Extended", rufl_GWIDTH_400 },
+	{ "Extnd", rufl_GWIDTH_400 },
+	{ "ExtraComp", rufl_GWIDTH_100 },
+	{ "Narrow", rufl_GWIDTH_200 },
+	{ "Skinny", rufl_GWIDTH_200 },
+	{ "TN", rufl_GWIDTH_200 },
+	{ "UltraComp", rufl_GWIDTH_100 },
+	{ "UltraWide", rufl_GWIDTH_500 },
+	{ "WD", rufl_GWIDTH_400 },
+	{ "Wide", rufl_GWIDTH_400 },
+};
+
+/** Map from font name part to flag. Must be case-insensitive sorted by name */
+const struct rufl_weight_table_entry rufl_flag_table[] = {
+	{ "Cap", rufl_FLAG_CAPS },
+	{ "Capitals", rufl_FLAG_CAPS },
+	{ "Caps", rufl_FLAG_CAPS },
+	{ "DropCaps", rufl_FLAG_CAPS },
+	{ "HollowCaps", rufl_FLAG_CAPS },
+	{ "IT", rufl_FLAG_SLANTED },
+	{ "ITA", rufl_FLAG_SLANTED },
+	{ "ITAL", rufl_FLAG_SLANTED },
+	{ "Italic", rufl_FLAG_SLANTED },
+	{ "OBL", rufl_FLAG_SLANTED },
+	{ "Oblique", rufl_FLAG_SLANTED },
+	{ "OBLQ", rufl_FLAG_SLANTED },
+	{ "Slant", rufl_FLAG_SLANTED },
+	{ "Slanted", rufl_FLAG_SLANTED },
+	{ "SmallCaps", rufl_FLAG_CAPS },
+};
+
+/** Map from font name part to typeface style. Must be case-insensitive sorted
+ * by name */
+const struct rufl_weight_table_entry rufl_typeface_style_table[] =
+{
+	{ "Cursive", rufl_FACE_STYLE_SERIF },
+	{ "Fancy", rufl_FACE_STYLE_SERIF },
+	{ "Mono", rufl_FACE_STYLE_MONOSPACE },
+	{ "MonoFont", rufl_FACE_STYLE_MONOSPACE },
+	{ "Monospace", rufl_FACE_STYLE_MONOSPACE },
+	{ "Monospaced", rufl_FACE_STYLE_MONOSPACE },
+	{ "Sans", rufl_FACE_STYLE_SANS_SERIF },
+	{ "SemiSans", rufl_FACE_STYLE_SANS_SERIF },
+	{ "SemiSerif", rufl_FACE_STYLE_SERIF },
+	{ "Serif", rufl_FACE_STYLE_SERIF },
+};
 
 static rufl_code rufl_init_font_list(void);
 static rufl_code rufl_init_add_font(const char *identifier, 
-		const char *local_name);
+		char *local_name);
 static int rufl_weight_table_cmp(const void *keyval, const void *datum);
 static rufl_code rufl_init_scan_font(unsigned int font);
 static bool rufl_is_space(unsigned int u);
@@ -280,7 +362,8 @@ static rufl_code rufl_init_add_family_map_entry(struct rufl_font_list_entry *f,
 	struct rufl_family_map_entry_storage *fmentry;
 	rufl_code code = rufl_OK;
 
-	rufl_family_map_entry_populate(&e, famidx, f->weight, f->slant, fidx);
+	rufl_family_map_entry_populate(&e, famidx, f->weight, f->gwidth,
+			f->slant, f->smallcaps, fidx);
 
 	fmentry = rufl_family_map_find(&e, rufl_family_map_cmp);
 
@@ -292,10 +375,19 @@ static rufl_code rufl_init_add_family_map_entry(struct rufl_font_list_entry *f,
 		code = rufl_family_map_append(&e);
 	} else if (!f->special) {
 		rufl_family_map_entry_populate(fmentry, famidx, f->weight,
-				f->slant, fidx);
+				f->gwidth, f->slant, f->smallcaps, fidx);
 	}
 
 	return code;
+}
+
+
+static int rufl_family_list_entry_cmp(const void *keyval, const void *datum)
+{
+	const char * const *key = keyval;
+	const char * const *entry = datum;
+
+	return strcasecmp(*key, *entry);
 }
 
 
@@ -316,8 +408,9 @@ static rufl_code rufl_init_normalise_lists(void)
 	size_t prev_famidx = 0;
 	rufl_code code;
 
-	/* The family list is already sorted because it contains
-	 * local names as returned by Font_ListFonts */
+	/* Sort the family list */
+	qsort(rufl_family_list, rufl_family_list_entries,
+			sizeof rufl_family_list[0], rufl_family_list_entry_cmp);
 
 	/* Sort the font list by identifier */
 	qsort(rufl_font_list, rufl_font_list_entries, sizeof rufl_font_list[0],
@@ -421,14 +514,16 @@ rufl_code rufl_init_font_list(void)
 	return rufl_OK;
 }
 
-
-static rufl_code rufl_init_categorise_font(const char *identifier,
-		char prefix[1024], char *prefix_end,
-		struct rufl_font_list_entry *f)
+static rufl_code rufl_init_font_may_substitute(struct rufl_font_list_entry *f,
+		char prefix[1024], char *prefix_end)
 {
-	const char *dot;
-	struct rufl_weight_table_entry *entry;
 	fileswitch_object_type obj_type;
+
+	/* Prevent use of undesireable fonts for substitution */
+	if (f->slant || f->smallcaps) {
+		f->may_substitute = false;
+		return rufl_OK;
+	}
 
 	/* Determine if this font is eligible fo use in subsitution */
 	/* Look for an IntMetrics file */
@@ -473,45 +568,324 @@ static rufl_code rufl_init_categorise_font(const char *identifier,
 		f->may_substitute = true;
 	}
 
-	/* Determine weight and slant by inspecting the identifier. */
+	return rufl_OK;
+}
+
+static rufl_code rufl_init_font_gather_properties(
+		struct rufl_font_list_entry *f, const char *identifier,
+		const char **family_end)
+{
+	rufl_str weight_modifier = {0}, width_field = {0};
+	const char *dot, *famend;
+	struct rufl_weight_table_entry *entry;
+	bool had_qualifier = false;
+
+	/* Default properties */
+	f->weight = rufl_WEIGHT_400;
+	f->gwidth = (rufl_GWIDTH_300 >> 4);
+	f->face_style = rufl_FACE_STYLE_SANS_SERIF;
+
 	dot = strchr(identifier, '.');
+	famend = dot ? dot - 1 : identifier + strlen(identifier);
 	while (dot) {
 		rufl_str part;
 		part.ptr = dot + 1;
 		dot = strchr(part.ptr, '.');
 		part.len = dot ? (size_t) (dot - part.ptr) : strlen(part.ptr);
 
-		if (strncasecmp(part.ptr, "Italic", part.len) == 0 ||
-				strncasecmp(part.ptr, "Oblique",
-					part.len) == 0) {
-			f->slant = 1;
-			continue;
+		/* Consider flags first */
+		entry = bsearch(&part, rufl_flag_table,
+				sizeof rufl_flag_table /
+				sizeof rufl_flag_table[0],
+				sizeof rufl_flag_table[0],
+				rufl_weight_table_cmp);
+		if (entry) {
+			if (entry->weight & rufl_FLAG_SLANTED)
+				f->slant = 1;
+			if (entry->weight & rufl_FLAG_CAPS)
+				f->smallcaps = 1;
+			had_qualifier = true;
+			goto finish;
 		}
+
+		/* Then typeface style */
+		entry = bsearch(&part, rufl_typeface_style_table,
+				sizeof rufl_typeface_style_table /
+				sizeof rufl_typeface_style_table[0],
+				sizeof rufl_typeface_style_table[0],
+				rufl_weight_table_cmp);
+		if (entry) {
+			/* The last typeface style in the name wins,
+			 * but only if there is no preceding qualifier.
+			 * The typeface style is not a qualifier itself
+			 * (and is therefore considered part of the
+			 * font family identifier). */
+			if (!had_qualifier)
+				f->face_style = entry->weight;
+			goto finish;
+		}
+
+		/* Then glyph widths */
+		entry = bsearch(&part, rufl_glyph_width_table,
+			sizeof rufl_glyph_width_table /
+			sizeof rufl_glyph_width_table[0],
+			sizeof rufl_glyph_width_table[0],
+			rufl_weight_table_cmp);
+		if (entry) {
+			f->gwidth = (entry->weight >> 4);
+			width_field = part;
+			had_qualifier = true;
+			goto finish;
+		}
+
+		/* Finally weights, dealing with modifiers */
 		entry = bsearch(&part, rufl_weight_table,
 				sizeof rufl_weight_table /
 				sizeof rufl_weight_table[0],
 				sizeof rufl_weight_table[0],
 				rufl_weight_table_cmp);
-		if (entry)
+		if (entry) {
+			uint32_t weight = entry->weight;
+
+			had_qualifier = true;
+
+			/* Demi, Extra, Semi, and Ultra are either weights
+			 * in their own right, or they adjust the weight
+			 * in the following part. Capture them and resolve
+			 * the conflict later. */
+			entry = bsearch(&part, rufl_weight_modifier_table,
+					sizeof rufl_weight_modifier_table /
+					sizeof rufl_weight_modifier_table[0],
+					sizeof rufl_weight_modifier_table[0],
+					rufl_weight_table_cmp);
+			if (entry) {
+				weight_modifier = part;
+				goto finish;
+			}
+
+			if (weight_modifier.ptr == NULL) {
+				f->weight = weight;
+				goto finish;
+			}
+
+			entry = bsearch(&weight_modifier,
+				rufl_weight_modifier_table,
+				sizeof rufl_weight_modifier_table /
+				sizeof rufl_weight_modifier_table[0],
+				sizeof rufl_weight_modifier_table[0],
+				rufl_weight_table_cmp);
+			assert(entry != NULL);
+
+			/* Apply modifier, but leave Regular/Medium alone */
+			if (weight < rufl_WEIGHT_400) {
+				weight -= (int) entry->weight;
+			} else if (weight > rufl_WEIGHT_500) {
+				weight += (int) entry->weight;
+			}
+
+			/* Ensure resulting weight is in range.
+			 * Force a signed comparison to deal with underflow. */
+			if ((int) weight > rufl_WEIGHT_900)
+				weight = rufl_WEIGHT_900;
+			if ((int) weight < rufl_WEIGHT_100)
+				weight = rufl_WEIGHT_100;
+			weight_modifier.ptr = NULL;
+			f->weight = weight;
+		} else {
+			/* Unknown component */
+			f->special = 1;
+		}
+
+finish:
+		/* Tidy up a dangling weight modifier */
+		if (weight_modifier.ptr != NULL &&
+				weight_modifier.ptr != part.ptr) {
+			entry = bsearch(&weight_modifier, rufl_weight_table,
+					sizeof rufl_weight_table /
+					sizeof rufl_weight_table[0],
+					sizeof rufl_weight_table[0],
+					rufl_weight_table_cmp);
+			assert(entry != NULL);
 			f->weight = entry->weight;
-		else
-			f->special = 1;  /* unknown weight or style */
+			weight_modifier.ptr = NULL;
+		}
+
+		/* Add to family if we haven't seen a qualifier */
+		if (!had_qualifier)
+			famend = part.ptr + part.len;
 	}
-	if (!f->weight)
-		f->weight = 4;
+
+	/* Tidy up a dangling weight modifier */
+	if (weight_modifier.ptr != NULL) {
+		entry = bsearch(&weight_modifier, rufl_weight_table,
+				sizeof rufl_weight_table /
+				sizeof rufl_weight_table[0],
+				sizeof rufl_weight_table[0],
+				rufl_weight_table_cmp);
+		assert(entry != NULL);
+		f->weight = entry->weight;
+		weight_modifier.ptr = NULL;
+	}
+
+	/* Certain widths also imply a weight adjustment.
+	 * Resolve them now we have computed the target weight */
+	if (width_field.ptr != NULL) {
+		uint32_t weight = f->weight;
+
+		entry = bsearch(&width_field,
+			rufl_weight_adjustment_table,
+			sizeof rufl_weight_adjustment_table /
+			sizeof rufl_weight_adjustment_table[0],
+			sizeof rufl_weight_adjustment_table[0],
+			rufl_weight_table_cmp);
+		if (entry != NULL) {
+			weight += (int) entry->weight;
+		}
+
+		/* Ensure resulting weight is in range.
+		 * Force a signed comparison to deal with underflow. */
+		if ((int) weight > rufl_WEIGHT_900)
+			weight = rufl_WEIGHT_900;
+		if ((int) weight < rufl_WEIGHT_100)
+			weight = rufl_WEIGHT_100;
+		f->weight = weight;
+		width_field.ptr = NULL;
+	}
+
 	f->weight--;
+	f->gwidth--;
+
+	*family_end = famend;
 
 	return rufl_OK;
 }
 
-rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
+static rufl_code rufl_init_categorise_font(const char *identifier,
+		char prefix[1024], char *prefix_end,
+		struct rufl_font_list_entry *f, const char **family_end)
+{
+	rufl_code code;
+
+	/* Determine properties by inspecting the identifier. */
+	code = rufl_init_font_gather_properties(f, identifier, family_end);
+	if (code != rufl_OK) {
+		return code;
+	}
+
+	/* Determine if this font may be used for substitution */
+	code = rufl_init_font_may_substitute(f, prefix, prefix_end);
+	if (code != rufl_OK) {
+		return code;
+	}
+
+	return rufl_OK;
+}
+
+static const char *rufl_init_isolate_family(const char *identifier,
+		const char *idfam_end, char *local_name)
+{
+	char *dot;
+	int ncomponents = 0, nfamcomponents = 0;
+
+	/* RUfl family names are localized. However, there is no
+	 * guarantee whatsoever that the localized name bears any
+	 * resemblance to the font identifier (not least, with the
+	 * exception of the optional trailing "*", the value of
+	 * the Messages file entry is entirely free-form).
+	 * Therefore, this family grouping logic only actually works
+	 * when font names are untranslated or the translated names
+	 * have the same shape as the identifier.
+	 *
+	 * Compare the shape of the each and, if they match, extract
+	 * the same number of components from the local name as are
+	 * present in the identifier before the end point computed by
+	 * the categorisation function.
+	 *
+	 * If the shapes do not match, use the first component of the
+	 * local name only.
+	 */
+
+	dot = strchr(identifier, '.');
+	while (dot) {
+		if (dot < idfam_end) {
+			nfamcomponents++;
+		}
+		ncomponents++;
+		dot = strchr(dot + 1, '.');
+	}
+	ncomponents++;
+
+	dot = strchr(local_name, '.');
+	while (dot) {
+		ncomponents--;
+		dot = strchr(dot + 1, '.');
+	}
+	ncomponents--;
+
+	dot = strchr(local_name, '.');
+	if (ncomponents == 0) {
+		/* Shapes match: take nfamcomponents components */
+		while (nfamcomponents-- > 0) {
+			dot = strchr(dot + 1, '.');
+		}
+	}
+	if (dot)
+		*dot = 0;
+
+	return local_name;
+}
+
+static int rufl_family_list_cmp(const void *keyval, const void *datum)
+{
+	const char *key = keyval;
+	const char * const *entry = datum;
+
+	return strcasecmp(key, *entry);
+}
+
+static rufl_code rufl_init_ensure_family(const char *family,
+		const char **family_out)
+{
+	const char **entry = NULL;
+	const char **family_list;
+
+	if (rufl_family_list_entries > 0) {
+		entry = bsearch(family, rufl_family_list,
+				rufl_family_list_entries,
+				sizeof rufl_family_list[0],
+				rufl_family_list_cmp);
+	}
+	if (entry == NULL) {
+		/* new family */
+		family_list = realloc(rufl_family_list,
+				sizeof rufl_family_list[0] *
+				(rufl_family_list_entries + 1));
+		if (!family_list)
+			return rufl_OUT_OF_MEMORY;
+		rufl_family_list = family_list;
+
+		family = strdup(family);
+		if (!family)
+			return rufl_OUT_OF_MEMORY;
+
+		rufl_family_list[rufl_family_list_entries] = family;
+		rufl_family_list_entries++;
+
+		entry = &family;
+	}
+
+	*family_out = *entry;
+
+	return rufl_OK;
+}
+
+rufl_code rufl_init_add_font(const char *identifier, char *local_name)
 {
 	char prefix[1024];
 	char *prefix_end;
 	struct rufl_font_list_entry *font_list;
-	char *dot;
-	const char **family_list;
 	const char *family;
+	const char *idfam_end;
 	struct rufl_font_list_entry *f;
 	font_f font;
 	rufl_code err;
@@ -561,7 +935,8 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	f = &rufl_font_list[rufl_font_list_entries];
 	memset(f, 0, sizeof(*f));
 
-	err = rufl_init_categorise_font(identifier, prefix, prefix_end, f);
+	err = rufl_init_categorise_font(identifier, prefix, prefix_end, f,
+			&idfam_end);
 	if (err != rufl_OK) {
 		/* Categorisation failed: ignore this font */
 		return rufl_OK;
@@ -573,36 +948,11 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 
 	rufl_font_list_entries++;
 
-	/* For historic reasons, RUfl family names are localized.
-	 * However, there is no guarantee whatsoever that the localized
-	 * name bears any resemblance to the font identifier (not least,
-	 * with the exception of the optional trailing "*", the value of
-	 * the Messages file entry is entirely free-form).
-	 * Therefore, this family grouping logic only actually works
-	 * when font names are untranslated or the translated names
-	 * have the same shape as the identifier.
-	 */
-	dot = strchr(local_name, '.');
-	family = local_name;
-	if (dot)
-		*dot = 0;
+	family = rufl_init_isolate_family(identifier, idfam_end, local_name);
 
-	if (rufl_family_list_entries == 0 || strcasecmp(family,
-			rufl_family_list[rufl_family_list_entries - 1]) != 0) {
-		/* new family */
-		family_list = realloc(rufl_family_list,
-				sizeof rufl_family_list[0] *
-				(rufl_family_list_entries + 1));
-		if (!family_list)
-			return rufl_OUT_OF_MEMORY;
-		rufl_family_list = family_list;
-
-		family = strdup(family);
-		if (!family)
-			return rufl_OUT_OF_MEMORY;
-
-		rufl_family_list[rufl_family_list_entries] = family;
-		rufl_family_list_entries++;
+	err = rufl_init_ensure_family(family, &family);
+	if (err != rufl_OK) {
+		return err;
 	}
 
 	/* Temporarily save the family name pointer in the font's charset
@@ -611,8 +961,7 @@ rufl_code rufl_init_add_font(const char *identifier, const char *local_name)
 	 * will not be used until after we have constructed these lists
 	 * (and after the list construction the pointers are guaranteed
 	 * to be NULL). */
-	f->charset = (struct rufl_character_set *) (void *) rufl_family_list[
-			rufl_family_list_entries - 1];
+	f->charset = (struct rufl_character_set *) (void *) family;
 
 	return rufl_OK;
 }

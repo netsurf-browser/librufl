@@ -17,7 +17,9 @@
 
 unsigned int font = 0;
 unsigned int weight = rufl_WEIGHT_400;
+unsigned int gwidth = rufl_GWIDTH_300;
 bool italic = false;
+bool smallcaps = false;
 unsigned int plane = 0;
 
 
@@ -73,7 +75,7 @@ int main(void)
 
 	try(rufl_init(), "rufl_init");
 
-	menu = malloc(wimp_SIZEOF_MENU(27 + rufl_family_list_entries));
+	menu = malloc(wimp_SIZEOF_MENU(33 + rufl_family_list_entries));
 	if (!menu)
 		die("Out of memory");
 	strcpy(menu->title_data.text, "Fonts");
@@ -84,7 +86,7 @@ int main(void)
 	menu->width = 200;
 	menu->height = wimp_MENU_ITEM_HEIGHT;
 	menu->gap = wimp_MENU_ITEM_GAP;
-	for (i = 0; i != 10; i++) {
+	for (i = 0; i != 9; i++) {
 		menu->entries[i].menu_flags = 0;
 		menu->entries[i].sub_menu = wimp_NO_SUB_MENU;
 		menu->entries[i].icon_flags = wimp_ICON_TEXT |
@@ -93,43 +95,60 @@ int main(void)
 		strcpy(menu->entries[i].data.text, "100");
 		menu->entries[i].data.text[0] = '1' + i;
 	}
-	menu->entries[9].menu_flags = wimp_MENU_SEPARATE;
-	menu->entries[9].sub_menu = wimp_NO_SUB_MENU;
-	menu->entries[9].icon_flags = wimp_ICON_TEXT |
-			(wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
-			(wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
-	strcpy(menu->entries[9].data.text, "Italic");
-	for (i = 0; i != 17; i++) {
-		menu->entries[10 + i].menu_flags =
-				(i == 16 ? wimp_MENU_SEPARATE :0);
-		menu->entries[10 + i].sub_menu = wimp_NO_SUB_MENU;
-		menu->entries[10 + i].icon_flags = wimp_ICON_TEXT |
+	menu->entries[i-1].menu_flags = wimp_MENU_SEPARATE;
+	for (; i != 9+5; i++) {
+		menu->entries[i].menu_flags = 0;
+		menu->entries[i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[i].icon_flags = wimp_ICON_TEXT |
 			      (wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
 			      (wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
-		strcpy(menu->entries[10 + i].data.text, "Plane  1");
-		menu->entries[10 + i].data.text[6] = '0' + (i+1)/10;
-		if (menu->entries[10 + i].data.text[6] == '0')
-			menu->entries[10 + i].data.text[6] = ' ';
-		menu->entries[10 + i].data.text[7] = '0' + (i+1)%10;
+		strcpy(menu->entries[i].data.text, "100");
+		menu->entries[i].data.text[0] = '1' + i - 9;
+	}
+	menu->entries[i-1].menu_flags = wimp_MENU_SEPARATE;
+	for (; i != 16; i++) {
+		menu->entries[i].menu_flags = 0;
+		menu->entries[i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[i].icon_flags = wimp_ICON_TEXT |
+			      (wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
+			      (wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
+		strcpy(menu->entries[i].data.text, "100");
+	}
+	menu->entries[i-1].menu_flags = wimp_MENU_SEPARATE;
+	strcpy(menu->entries[i-2].data.text, "Italic");
+	strcpy(menu->entries[i-1].data.text, "SmallCaps");
+	for (i = 0; i != 17; i++) {
+		menu->entries[16 + i].menu_flags =
+				(i == 16 ? wimp_MENU_SEPARATE :0);
+		menu->entries[16 + i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[16 + i].icon_flags = wimp_ICON_TEXT |
+			      (wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
+			      (wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
+		strcpy(menu->entries[16 + i].data.text, "Plane  1");
+		menu->entries[16 + i].data.text[6] = '0' + (i+1)/10;
+		if (menu->entries[16 + i].data.text[6] == '0')
+			menu->entries[16 + i].data.text[6] = ' ';
+		menu->entries[16 + i].data.text[7] = '0' + (i+1)%10;
 	}
 	for (i = 0; i != rufl_family_list_entries; i++) {
-		menu->entries[27 + i].menu_flags = 0;
-		menu->entries[27 + i].sub_menu = wimp_NO_SUB_MENU;
-		menu->entries[27 + i].icon_flags = wimp_ICON_TEXT |
+		menu->entries[33 + i].menu_flags = 0;
+		menu->entries[33 + i].sub_menu = wimp_NO_SUB_MENU;
+		menu->entries[33 + i].icon_flags = wimp_ICON_TEXT |
 				wimp_ICON_INDIRECTED |
 			(wimp_COLOUR_BLACK << wimp_ICON_FG_COLOUR_SHIFT) |
 			(wimp_COLOUR_WHITE << wimp_ICON_BG_COLOUR_SHIFT);
-		menu->entries[27 + i].data.indirected_text.text =
+		menu->entries[33 + i].data.indirected_text.text =
 				(char *) rufl_family_list[i];
-		menu->entries[27 + i].data.indirected_text.validation =
+		menu->entries[33 + i].data.indirected_text.validation =
 				(char *) -1;
-		menu->entries[27 + i].data.indirected_text.size =
+		menu->entries[33 + i].data.indirected_text.size =
 				strlen(rufl_family_list[i]);
 	}
 	menu->entries[3].menu_flags |= wimp_MENU_TICKED;
-	menu->entries[10].menu_flags |= wimp_MENU_TICKED;
-	menu->entries[27].menu_flags |= wimp_MENU_TICKED;
-	menu->entries[i + 26].menu_flags |= wimp_MENU_LAST;
+	menu->entries[11].menu_flags |= wimp_MENU_TICKED;
+	menu->entries[16].menu_flags |= wimp_MENU_TICKED;
+	menu->entries[33].menu_flags |= wimp_MENU_TICKED;
+	menu->entries[i + 32].menu_flags |= wimp_MENU_LAST;
 
 	error = xwimp_create_window((wimp_window *) &window, &w);
 	if (error)
@@ -205,20 +224,33 @@ int main(void)
 				weight = block.selection.items[0] + 1;
 				menu->entries[weight - 1].menu_flags ^=
 						wimp_MENU_TICKED;
-			} else if (block.selection.items[0] == 9) {
+			} else if (block.selection.items[0] <= 13) {
+				menu->entries[
+					9 + (gwidth >> 4) - 1
+				].menu_flags ^= wimp_MENU_TICKED;
+				gwidth = (block.selection.items[0] - 8) << 4;
+				menu->entries[
+					9 + (gwidth >> 4) - 1
+				].menu_flags ^= wimp_MENU_TICKED;
+			} else if (block.selection.items[0] == 14) {
 				italic = !italic;
-				menu->entries[9].menu_flags ^= wimp_MENU_TICKED;
-			} else if (block.selection.items[0] <= 26) {
-				menu->entries[10 + plane].menu_flags ^=
+				menu->entries[14].menu_flags ^=
 						wimp_MENU_TICKED;
-				plane = block.selection.items[0] - 10;
-				menu->entries[10 + plane].menu_flags ^=
+			} else if (block.selection.items[0] == 15) {
+				smallcaps = !smallcaps;
+				menu->entries[15].menu_flags ^=
+						wimp_MENU_TICKED;
+			} else if (block.selection.items[0] <= 32) {
+				menu->entries[16 + plane].menu_flags ^=
+						wimp_MENU_TICKED;
+				plane = block.selection.items[0] - 16;
+				menu->entries[16 + plane].menu_flags ^=
 						wimp_MENU_TICKED;
 			} else {
-				menu->entries[27 + font].menu_flags ^=
+				menu->entries[33 + font].menu_flags ^=
 						wimp_MENU_TICKED;
-				font = block.selection.items[0] - 27;
-				menu->entries[27 + font].menu_flags ^=
+				font = block.selection.items[0] - 33;
+				menu->entries[33 + font].menu_flags ^=
 						wimp_MENU_TICKED;
 			}
 			error = xwimp_force_redraw(w,
@@ -266,7 +298,9 @@ rufl_code redraw(int x, int y, int y0, int y1)
 	unsigned int l;
 	unsigned int u;
 	rufl_code code;
-	rufl_style style = weight | (italic ? rufl_SLANTED : 0);
+	rufl_style style = weight | gwidth |
+			(italic ? rufl_FLAG_SLANTED : 0) |
+			(smallcaps ? rufl_FLAG_CAPS : 0);
 
 	for (u = y0 / 40 * 32; (int) u != (y1 / 40 + 1) * 32; u++) {
 		unsigned int c = (plane << 16) | u;

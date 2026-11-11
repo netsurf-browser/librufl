@@ -26,7 +26,9 @@ void rufl_dump_state(bool verbose)
 
 	printf("rufl_font_list:\n");
 	for (i = 0; i != rufl_font_list_entries; i++) {
-		printf("  %u \"%s\"\n", i, rufl_font_list[i].identifier);
+		printf("  %u (%u) \"%s\"\n", i,
+			rufl_font_list[i].face_style,
+			rufl_font_list[i].identifier);
 		if (rufl_font_list[i].charset) {
 			printf("    ");
 			rufl_dump_character_set_list(rufl_font_list[i].charset);
@@ -50,11 +52,10 @@ void rufl_dump_state(bool verbose)
 	for (i = 0; i != rufl_family_list_entries; i++) {
 		struct rufl_family_map_entry_storage k;
 		struct rufl_family_map_entry_storage *e;
-		int32_t weight = -1, slant = -1;
 
 		printf("  %u \"%s\"\n", i, rufl_family_list[i]);
 
-		rufl_family_map_entry_populate(&k, i, 0, 0, 0);
+		rufl_family_map_entry_populate(&k, i, 0, 0, 0, 0, 0);
 
 		/* Find an entry that matches this family */
 		e = rufl_family_map_find(&k, rufl_family_map_family_cmp);
@@ -70,50 +71,17 @@ void rufl_dump_state(bool verbose)
 		while (e != NULL && rufl_family_map_family_cmp(&k, e) == 0) {
 			struct rufl_family_map_entry_storage *next =
 					rufl_family_map_next(e);
-			uint32_t w, s, font;
+			uint32_t w, gw, s, sc, font;
 
-			rufl_family_map_entry_parse(e, NULL, &w, &s, &font);
+			rufl_family_map_entry_parse(e, NULL, &w, &gw, &s, &sc,
+					&font);
 
-			while (weight < (int32_t) w) {
-				if (slant == 0) {
-					/* Last record was unslanted */
-					printf("- \n");
-					slant = 1;
-				} else {
-					/* Last record was slanted */
-					weight++;
-					slant = 0;
-					if (weight < (int32_t) w)
-						printf("    %u - ", weight);
-				}
-			}
-			if (s == 0) {
-				/* This record is unslanted */
-				printf("    %u \"%s\" ", weight,
+			/* The data is sparse: embrace it */
+			printf("    gw: %u w: %u s: %u sc: %u \"%s\"\n",
+					(gw + 1) * 100, (w + 1) * 100, s, sc,
 					rufl_font_list[font].identifier);
-			} else {
-				/* This record is slanted */
-				printf("\"%s\" \n",
-					rufl_font_list[font].identifier);
-			}
-
-			weight = w;
-			slant = s;
 
 			e = next;
-		}
-		while (weight < 9) {
-			if (slant == 0) {
-				/* Last record was unslanted */
-				printf("- \n");
-				slant = 1;
-			} else {
-				/* Last record was slanted */
-				weight++;
-				slant = 0;
-				if (weight < 9)
-					printf("    %u - ", weight);
-			}
 		}
 	}
 

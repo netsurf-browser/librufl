@@ -84,16 +84,6 @@ static rufl_code rufl_find_font_family_by_identifier(const char *font_family,
 	return rufl_OK;
 }
 
-static int32_t distance(uint32_t tweight, uint32_t tslant,
-		uint32_t weight, uint32_t slant)
-{
-	/* Weight takes precedence over slant */
-	int32_t tval = (tweight << 8) | tslant;
-	int32_t cval = (weight << 8) | slant;
-
-	return cval - tval;
-}
-
 static rufl_code rufl_find_font_family_by_family_and_style(
 		const char *font_family, rufl_style font_style,
 		unsigned int *font)
@@ -102,7 +92,7 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 	struct rufl_family_map_entry_storage k;
 	const struct rufl_family_map_entry_storage *e;
 	const char **family;
-	uint32_t f, slant, weight;
+	uint32_t f, slant, weight, gwidth, smallcaps;
 
 	family = bsearch(font_family, rufl_family_list,
 			rufl_family_list_entries,
@@ -111,89 +101,28 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 	if (!family)
 		return rufl_FONT_NOT_FOUND;
 
+	gwidth = ((font_style >> 4) & 0xf);
+	/* For backwards compatibility, map a gwidth of 0 to regular width */
+	gwidth = (gwidth == 0) ? 2 : gwidth - 1;
+	assert(gwidth <= 4);
 	weight = (font_style & 0xf) - 1;
 	assert(weight <= 8);
-	slant = font_style & rufl_SLANTED ? 1 : 0;
+	smallcaps = font_style & rufl_FLAG_CAPS ? 1 : 0;
+	slant = font_style & rufl_FLAG_SLANTED ? 1 : 0;
 
 	rufl_family_map_entry_populate(&k, family - rufl_family_list, weight,
-			slant, 0);
+			gwidth, slant, smallcaps, 0);
 
 	/* Find an entry that matches the requested family and style */
 	e = rufl_family_map_find(&k, rufl_family_map_cmp);
 	if (e == NULL) {
-		const struct rufl_family_map_entry_storage *best = NULL;
-		int32_t best_distance = INT32_MAX;
-		uint32_t w, s;
-
-		/* No exact match: find an arbitrary entry for this family */
-		e = rufl_family_map_find(&k, rufl_family_map_family_cmp);
-		assert(e != NULL);
-
-		/* Try to improve the match */
-		while (e != NULL && rufl_family_map_family_cmp(e, &k) == 0) {
-			int32_t d;
-
-			rufl_family_map_entry_parse(e, NULL, &w, &s, NULL);
-
-			d = distance(weight, slant, w, s);
-			if (abs(d) < abs(best_distance)) {
-				best = e;
-				best_distance = d;
-			} else if (abs(d) == abs(best_distance)) {
-				/* Two candidates, of equal legitimacy */
-				/* below Regular weight, favour lighter */
-				if ((weight <= 2 && d < best_distance) ||
-						(weight > 2 &&
-						 d > best_distance)) {
-					best = e;
-					best_distance = d;
-				}
-				/* No further improvement to be had: done */
-				break;
-			} else {
-				/* Current candidate is worse: done */
-				break;
-			}
-
-			if (d < 0) {
-				/* Candidate is below target */
-				e = rufl_family_map_next(e);
-			} else {
-				/* Candidate is above target */
-				e = rufl_family_map_prev(e);
-			}
-		}
-
-		/* We have discovered the best match, but the slant
-		 * may not meet requirements. If it differs, look for
-		 * the same weight with the matching slant and prefer it.
-		 */
-		rufl_family_map_entry_parse(best, NULL, &w, &s, NULL);
-		if (s != slant) {
-			if (s > slant) {
-				/* Candidate has slant, but target does not */
-				e = rufl_family_map_prev(best);
-			} else {
-				/* Target has slant, but candidate does not */
-				e = rufl_family_map_next(best);
-			}
-			if (e != NULL) {
-				uint32_t cw, cs;
-				rufl_family_map_entry_parse(e, &f, &cw, &cs,
-						NULL);
-				if (cw == w && cs == slant &&
-						f == (uint32_t) (family -
-							rufl_family_list)) {
-					/* Same family/weight; better slant */
-					best = e;
-				}
-			}
-		}
-
-		e = best;
+		/* No exact match: search for the closest one */
+		e = rufl_family_map_find_closest(&k);
+		if (e == NULL)
+			return rufl_FONT_NOT_FOUND;
 	}
 
-	rufl_family_map_entry_parse(e, NULL, NULL, NULL, &f);
+	rufl_family_map_entry_parse(e, NULL, NULL, NULL, NULL, NULL, &f);
 
 	*font = f;
 

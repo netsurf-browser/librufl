@@ -121,6 +121,12 @@ struct rufl_unicode_map {
 	struct rufl_unicode_map_entry map[256];
 };
 
+/** Typeface style of a font */
+typedef enum {
+	rufl_FACE_STYLE_MONOSPACE = 0,
+	rufl_FACE_STYLE_SANS_SERIF,
+	rufl_FACE_STYLE_SERIF,
+} rufl_face_style;
 
 /** An entry in rufl_font_list. */
 struct rufl_font_list_entry {
@@ -137,8 +143,14 @@ struct rufl_font_list_entry {
 	uint32_t family: 16;
 	/** Font weight (0 to 8). */
 	uint32_t weight: 4;
+	/** Font glyph width (0 to 4). */
+	uint32_t gwidth: 3;
 	/** Font slant (0 or 1). */
 	uint32_t slant: 1;
+	/** Font smallcaps (0 or 1). */
+	uint32_t smallcaps: 1;
+	/** Font typeface style (0 to 2) c.f. rufl_face_style */
+	uint32_t face_style : 2;
 	/** Whether this font can be used for substitution (0 or 1) */
 	uint32_t may_substitute: 1;
 	/* Whether the identifier has components unknown to RUfl (0 or 1) */
@@ -197,11 +209,11 @@ extern bool rufl_can_background_blend;
 int rufl_family_map_cmp(const void *e1, const void *e2);
 int rufl_family_map_family_cmp(const void *e1, const void *e2);
 void rufl_family_map_entry_populate(struct rufl_family_map_entry_storage *e,
-		uint32_t family, uint32_t weight, uint32_t slanted,
-		uint32_t font);
+		uint32_t family, uint32_t weight, uint32_t gwidth,
+		uint32_t slanted, uint32_t smallcaps, uint32_t font);
 void rufl_family_map_entry_parse(const struct rufl_family_map_entry_storage *e,
-		uint32_t *family, uint32_t *weight, uint32_t *slanted,
-		uint32_t *font);
+		uint32_t *family, uint32_t *weight, uint32_t *gwidth,
+		uint32_t *slanted, uint32_t *smallcaps, uint32_t *font);
 struct rufl_family_map_entry_storage *rufl_family_map_prev(
 		const struct rufl_family_map_entry_storage *e);
 struct rufl_family_map_entry_storage *rufl_family_map_next(
@@ -209,6 +221,8 @@ struct rufl_family_map_entry_storage *rufl_family_map_next(
 struct rufl_family_map_entry_storage *rufl_family_map_find(
 		const struct rufl_family_map_entry_storage *k,
 		int (*cmpfunc)(const void *, const void *));
+struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
+		const struct rufl_family_map_entry_storage *k);
 rufl_code rufl_family_map_append(const struct rufl_family_map_entry_storage *e);
 
 rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
