@@ -182,6 +182,15 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 
 
 /**
+ * Determine the bounding box of Unicode text.
+ */
+
+rufl_code rufl_string_bbox(const char *font_family, rufl_style font_style,
+		unsigned int font_size,
+		const char *string, size_t length,
+		os_box *bbox);
+
+/**
  * Dump the internal library state to stdout.
  */
 
