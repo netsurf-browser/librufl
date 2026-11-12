@@ -71,6 +71,94 @@ rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 	return rufl_OK;
 }
 
+static rufl_code rufl_find_font_family_by_identifier(const char *font_family,
+		unsigned int *font)
+{
+	/* "font_family" contains a font identifier: direct lookup */
+	const struct rufl_font_list_entry *fe;
+
+	/* We only support a single qualifier */
+	if (strchr(font_family + 1, '\\') != NULL)
+		return rufl_FONT_NOT_FOUND;
+
+	/* There must be at least one character after the qualifier */
+	if (strlen(font_family) < 3)
+		return rufl_FONT_NOT_FOUND;
+
+	/* Ensure the qualifier is F */
+	if (*(font_family + 1) != 'F')
+		return rufl_FONT_NOT_FOUND;
+
+	/* We have a valid identifier string. Search for the font */
+	fe = bsearch(font_family+2, rufl_font_list,
+			rufl_font_list_entries,
+			sizeof rufl_font_list[0], rufl_font_list_cmp);
+	if (!fe)
+		return rufl_FONT_NOT_FOUND;
+
+	*font = fe - rufl_font_list;
+
+	return rufl_OK;
+}
+
+static rufl_code rufl_find_font_family_by_family_and_style(
+		const char *font_family, rufl_style font_style,
+		unsigned int *font)
+{
+	/* "font_family" is a family name: map via family map */
+	const char **family;
+	unsigned int f, diff, slant;
+	int weight, used_weight;
+	int search_direction;
+
+	family = bsearch(font_family, rufl_family_list,
+			rufl_family_list_entries,
+			sizeof rufl_family_list[0],
+			rufl_family_list_cmp);
+	if (!family)
+		return rufl_FONT_NOT_FOUND;
+
+	weight = (font_style & 0xf) - 1;
+	assert(weight <= 8);
+	slant = font_style & rufl_SLANTED ? 1 : 0;
+
+	struct rufl_family_map_entry *e =
+			&rufl_family_map[family - rufl_family_list];
+	used_weight = weight;
+
+	/* below Regular weight, favour lighter weights first */
+	if (weight <= 2)
+		search_direction = -1;
+	else
+		search_direction = +1;
+
+	diff = 0;
+	while (1) {
+		/* look alternately in each direction for closest
+		 * weight. exact match tested first time through
+		 * loop with diff zero */
+		used_weight = weight + search_direction * diff;
+		f = rufl_check_used_weight(e, used_weight, slant);
+		if ( f != NO_FONT )
+			break;
+
+		if ( diff ) {
+			/* check opposite direction, on subsequent
+			 * passes */
+			used_weight = weight - search_direction * diff;
+			f = rufl_check_used_weight(e, used_weight,
+					slant);
+			if ( f != NO_FONT )
+				break;
+		}
+
+		diff++;
+	}
+
+	*font = f;
+
+	return rufl_OK;
+}
 
 /**
  * Find a font family.
@@ -80,85 +168,19 @@ rufl_code rufl_find_font_family(const char *font_family,
 		unsigned int *slanted, struct rufl_character_set **charset)
 {
 	unsigned int f;
+	rufl_code code;
 
 	if (!font_family)
 		return rufl_FONT_NOT_FOUND;
 
 	if (*font_family == '\\') {
-		/* "font_family" contains a font identifier: direct lookup */
-		const struct rufl_font_list_entry *fe;
-
-		/* We only support a single qualifier */
-		if (strchr(font_family + 1, '\\') != NULL)
-			return rufl_FONT_NOT_FOUND;
-
-		/* There must be at least one character after the qualifier */
-		if (strlen(font_family) < 3)
-			return rufl_FONT_NOT_FOUND;
-
-		/* Ensure the qualifier is F */
-		if (*(font_family + 1) != 'F')
-			return rufl_FONT_NOT_FOUND;
-
-		/* We have a valid identifier string. Search for the font */
-		fe = bsearch(font_family+2, rufl_font_list,
-				rufl_font_list_entries,
-				sizeof rufl_font_list[0], rufl_font_list_cmp);
-		if (!fe)
-			return rufl_FONT_NOT_FOUND;
-
-		f = fe - rufl_font_list;
+		code = rufl_find_font_family_by_identifier(font_family, &f);
 	} else {
-		/* "font_family" is a family name: map via family map */
-		const char **family;
-		unsigned int diff, slant;
-		int weight, used_weight;
-		int search_direction;
-
-		family = bsearch(font_family, rufl_family_list,
-				rufl_family_list_entries,
-				sizeof rufl_family_list[0],
-				rufl_family_list_cmp);
-		if (!family)
-			return rufl_FONT_NOT_FOUND;
-
-		weight = (font_style & 0xf) - 1;
-		assert(weight <= 8);
-		slant = font_style & rufl_SLANTED ? 1 : 0;
-
-		struct rufl_family_map_entry *e =
-				&rufl_family_map[family - rufl_family_list];
-		used_weight = weight;
-
-		/* below Regular weight, favour lighter weights first */
-		if (weight <= 2)
-			search_direction = -1;
-		else
-			search_direction = +1;
-
-		diff = 0;
-		while (1) {
-			/* look alternately in each direction for closest
-			 * weight. exact match tested first time through
-			 * loop with diff zero */
-			used_weight = weight + search_direction * diff;
-			f = rufl_check_used_weight(e, used_weight, slant);
-			if ( f != NO_FONT )
-				break;
-
-			if ( diff ) {
-				/* check opposite direction, on subsequent
-				 * passes */
-				used_weight = weight - search_direction * diff;
-				f = rufl_check_used_weight(e, used_weight,
-						slant);
-				if ( f != NO_FONT )
-					break;
-			}
-
-			diff++;
-		}
+		code = rufl_find_font_family_by_family_and_style(font_family,
+				font_style, &f);
 	}
+	if (code != rufl_OK)
+		return code;
 
 	if (font)
 		(*font) = f;
