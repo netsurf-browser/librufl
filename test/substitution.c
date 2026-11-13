@@ -536,6 +536,7 @@ static void read_config(const char *path, struct cfg *cfg)
 int main(int argc, const char **argv)
 {
 	os_box bbox;
+	int twidth;
 	const int font_size = 160;
 	size_t i;
 
@@ -588,11 +589,15 @@ int main(int argc, const char **argv)
 	 * the result here will suffice for everything). */
 	assert(rufl_OK == rufl_font_bbox("Corpus", rufl_WEIGHT_500,
 				font_size, &bbox));
+	/* Compute width of tofu */
+	assert(rufl_OK == rufl_width("Corpus", rufl_WEIGHT_500, font_size,
+			"\x01", 1, &twidth));
 
 	/* Run the test cases */
 	for (i = 0; i < cfg.n_testcases; i++) {
 		const rufl_test_harness_paint_call *call = NULL;
 		const struct testcase *tc = &cfg.testcases[i];
+		int x = 0;
 		size_t e;
 
 		rufl_test_harness_discard_paint_calls();
@@ -613,7 +618,7 @@ int main(int argc, const char **argv)
 			ecall.font.xres = ecall.font.yres = 90;
 			ecall.font.xsize = font_size / exp->sdiv;
 			ecall.font.ysize = font_size / exp->sdiv;
-			ecall.xpos = exp->xoff * bbox.x1;
+			ecall.xpos = x;
 			ecall.ypos = 0;
 			if (exp->ydiv != 0) {
 				ecall.ypos += bbox.y1 / exp->ydiv;
@@ -625,6 +630,17 @@ int main(int argc, const char **argv)
 			call = rufl_test_harness_paint_enumerate(call);
 			rufl_test_harness_assert_paint_call(call, &ecall,
 					exp->text);
+
+			if (e + 1 < tc->n_expect && strcmp(exp->fontname,
+					"Corpus.Medium") == 0) {
+				/* Replacement */
+				x += twidth *
+					(tc->expect[e+1].xoff - exp->xoff);
+			} else if (e + 1 < tc->n_expect) {
+				/* Non replaced */
+				x += bbox.x1 *
+					(tc->expect[e+1].xoff - exp->xoff);
+			}
 		}
 
 		call = rufl_test_harness_paint_enumerate(call);
