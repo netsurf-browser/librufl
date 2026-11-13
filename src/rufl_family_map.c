@@ -33,13 +33,7 @@ struct rufl_family_map_entry_base {
 	 * indexes (one for the family, the other for the font).
 	 * Bit 15 of "bits" distinguishes between them.
 	 */
-	union {
-		uint16_t family;
-		struct {
-			uint8_t family;
-			uint8_t font;
-		} b8;
-	} u;
+	uint16_t value;
 };
 
 /** An entry in rufl_family_map */
@@ -73,11 +67,11 @@ int rufl_family_map_cmp(const void *e1, const void *e2)
 			(entry->base.bits & rufl_FAMILY_MAP_16bit));
 
 	if (key->base.bits & rufl_FAMILY_MAP_16bit) {
-		k1 = (key->base.u.family << 16) | key->base.bits;
-		k2 = (entry->base.u.family << 16) | entry->base.bits;
+		k1 = (key->base.value << 16) | key->base.bits;
+		k2 = (entry->base.value << 16) | entry->base.bits;
 	} else {
-		k1 = (key->base.u.b8.family << 16) | key->base.bits;
-		k2 = (entry->base.u.b8.family << 16) | entry->base.bits;
+		k1 = ((key->base.value & 0xff) << 16) | key->base.bits;
+		k2 = ((entry->base.value & 0xff) << 16) | entry->base.bits;
 	}
 
 	return (int32_t) (k1 - k2);
@@ -100,11 +94,11 @@ int rufl_family_map_family_cmp(const void *e1, const void *e2)
 			(entry->base.bits & rufl_FAMILY_MAP_16bit));
 
 	if (key->base.bits & rufl_FAMILY_MAP_16bit) {
-		k1 = (key->base.u.family << 16);
-		k2 = (entry->base.u.family << 16);
+		k1 = (key->base.value << 16);
+		k2 = (entry->base.value << 16);
 	} else {
-		k1 = (key->base.u.b8.family << 16);
-		k2 = (entry->base.u.b8.family << 16);
+		k1 = ((key->base.value & 0xff) << 16);
+		k2 = ((entry->base.value & 0xff) << 16);
 	}
 
 	return (int32_t) (k1 - k2);
@@ -134,11 +128,10 @@ void rufl_family_map_entry_populate(struct rufl_family_map_entry_storage *e,
 
 	if (rufl_family_list_entries > 256 || rufl_font_list_entries > 256) {
 		i->base.bits |= rufl_FAMILY_MAP_16bit;
-		i->base.u.family = family;
+		i->base.value = family;
 		i->font = font;
 	} else {
-		i->base.u.b8.family = family;
-		i->base.u.b8.font = font;
+		i->base.value = (font << 8) | family;
 	}
 }
 
@@ -164,14 +157,14 @@ void rufl_family_map_entry_parse(const struct rufl_family_map_entry_storage *e,
 
 	if (i->base.bits & rufl_FAMILY_MAP_16bit) {
 		if (family != NULL)
-			*family = i->base.u.family;
+			*family = i->base.value;
 		if (font != NULL)
 			*font = i->font;
 	} else {
 		if (family != NULL)
-			*family = i->base.u.b8.family;
+			*family = i->base.value & 0xff;
 		if (font != NULL)
-			*font = i->base.u.b8.font;
+			*font = (i->base.value >> 8);
 	}
 }
 
