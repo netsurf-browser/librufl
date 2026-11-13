@@ -50,6 +50,10 @@ struct rufl_family_map_entry {
 	/** Padding (0) */
 	uint16_t pad;
 };
+/* Statically assert that the public storage representation is large enough */
+extern char rufl_family_map_storage_too_small[
+		sizeof(struct rufl_family_map_entry) <=
+		sizeof(struct rufl_family_map_entry_storage) ? 1: -1];
 
 
 /**
