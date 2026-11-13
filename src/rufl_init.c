@@ -1186,8 +1186,26 @@ static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	(void) glyph_idx;
 
 	/* Skip DELETE and C0/C1 controls */
-	if (ucs4 > 0x0020 && (ucs4 < 0x007f || 0x009f < ucs4))
-		planes[(ucs4 >> 16) & 0x1f] = (struct rufl_character_set *) 1;
+	if (ucs4 < 0x0020 && (0x007f <= ucs4 && ucs4 <= 0x009f))
+		return rufl_OK;
+
+	/* Ignore the "End User subarea" of the Private Use Area.
+	 *
+	 * The UCS Font Manager uses these codepoints to represent
+	 * unmapped names found in the font's (base) encoding
+	 * (i.e. names which do not appear in the Adobe Glyph List)
+	 * as per the guidance in v1.1 of Adobe's "Unicode and Glyph Names".
+	 *
+	 * While we could parse the relevant Encoding file to recover
+	 * the original glyph names and attempt to divine meaning from
+	 * them, doing so is both complex and excessive. Just accept
+	 * that the handful of glyphs in question (14 in /Base0, plus
+	 * the 32 unreachable glyphs in chunk 0) cannot be used.
+	 */
+	if (0xe000 <= ucs4 && ucs4 <= 0xefff)
+		return rufl_OK;
+
+	planes[(ucs4 >> 16) & 0x1f] = (struct rufl_character_set *) 1;
 
 	return rufl_OK;
 }
@@ -1209,6 +1227,10 @@ static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 
 	/* Skip DELETE and C0/C1 controls */
 	if (ucs4 < 0x0020 || (0x007f <= ucs4 && ucs4 <= 0x009f))
+		return rufl_OK;
+
+	/* Ignore the "End User subarea" of the Private Use Area. */
+	if (0xe000 <= ucs4 && ucs4 <= 0xefff)
 		return rufl_OK;
 
 	if (ucs4 % 0x200 == 0)
