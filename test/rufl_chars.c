@@ -117,6 +117,7 @@ int main(void)
 	menu->entries[i-1].menu_flags = wimp_MENU_SEPARATE;
 	strcpy(menu->entries[i-2].data.text, "Italic");
 	strcpy(menu->entries[i-1].data.text, "SmallCaps");
+	menu->entries[i-1].icon_flags |= wimp_ICON_SHADED;
 	for (i = 0; i != 17; i++) {
 		menu->entries[16 + i].menu_flags =
 				(i == 16 ? wimp_MENU_SEPARATE :0);
@@ -300,7 +301,7 @@ rufl_code redraw(int x, int y, int y0, int y1)
 	rufl_code code;
 	rufl_style style = weight | gwidth |
 			(italic ? rufl_FLAG_SLANTED : 0) |
-			(smallcaps ? rufl_FLAG_CAPS : 0);
+			(/*smallcaps ? rufl_FLAG_CAPS :*/ 0);
 
 	for (u = y0 / 40 * 32; (int) u != (y1 / 40 + 1) * 32; u++) {
 		unsigned int c = (plane << 16) | u;

@@ -107,7 +107,7 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 	assert(gwidth <= 4);
 	weight = (font_style & 0xf) - 1;
 	assert(weight <= 8);
-	smallcaps = font_style & rufl_FLAG_CAPS ? 1 : 0;
+	smallcaps = 0; /*font_style & rufl_FLAG_CAPS ? 1 : 0;*/
 	slant = font_style & rufl_FLAG_SLANTED ? 1 : 0;
 
 	rufl_family_map_entry_populate(&k, family - rufl_family_list, weight,

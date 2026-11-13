@@ -128,6 +128,10 @@ typedef enum {
 	rufl_FACE_STYLE_SERIF,
 } rufl_face_style;
 
+
+/* Flags for internal use only. Public flags start at bit 8. */
+#define rufl_FLAG_CAPS 0x0001 /* Use capitals for lower-case */
+
 /** An entry in rufl_font_list. */
 struct rufl_font_list_entry {
 	/** Font identifier (name). */

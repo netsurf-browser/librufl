@@ -64,7 +64,6 @@ typedef enum {
 
 	/* Binary flags (choose as many as required) */
 	rufl_FLAG_SLANTED = 0x0100, /* Slanted (i.e. Italic / Oblique) */
-	rufl_FLAG_CAPS    = 0x0200, /* Use capitals for lower-case */
 } rufl_style;
 
 /* backwards compatibility */
