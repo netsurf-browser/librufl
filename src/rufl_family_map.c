@@ -263,10 +263,20 @@ struct rufl_family_map_entry_storage *rufl_family_map_find(
 struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		const struct rufl_family_map_entry_storage *k)
 {
-	struct rufl_family_map_entry_storage target = *k;
+	struct rufl_family_map_entry_storage target;
 	struct rufl_family_map_entry_storage *e, *best = NULL;
 	int best_distance;
 	uint32_t weight, pass;
+
+	/* Initialise target from client parameter, taking care to
+	 * copy only the amount of data guaranteed to be available. */
+	if (((struct rufl_family_map_entry_base *) k)->bits &
+			rufl_FAMILY_MAP_16bit) {
+		target = *k;
+	} else {
+		target.val1 = k->val1;
+		target.val2 = 0;
+	}
 
 #ifdef FM_DEBUG
 	{
