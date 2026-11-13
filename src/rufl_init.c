@@ -76,6 +76,7 @@ const struct rufl_weight_table_entry rufl_weight_table[] = {
 	{ "Demi", rufl_WEIGHT_600 },
 	{ "DemiBold", rufl_WEIGHT_600 },
 	{ "DemiLight", rufl_WEIGHT_300 },
+	{ "EX", rufl_WEIGHT_800 },
 	{ "Extra", rufl_WEIGHT_800 },
 	{ "ExtraBlack", rufl_WEIGHT_900 },
 	{ "ExtraBold", rufl_WEIGHT_800 },
@@ -102,6 +103,7 @@ const struct rufl_weight_table_entry rufl_weight_table[] = {
 const struct rufl_weight_table_entry rufl_weight_modifier_table[] =
 {
 	{ "Demi", (unsigned int) -1 },
+	{ "EX", 1 },
 	{ "Extra", 1 },
 	{ "Semi", (unsigned int) -1 },
 	{ "Ultra", 2 },
@@ -970,7 +972,29 @@ int rufl_weight_table_cmp(const void *keyval, const void *datum)
 {
 	const rufl_str *key = keyval;
 	const struct rufl_weight_table_entry *entry = datum;
-	return strncasecmp(key->ptr, entry->name, key->len);
+	const char *a = key->ptr;
+	const char *b = entry->name;
+	size_t alen = key->len;
+	size_t blen = strlen(b);
+	int diff = 0;
+
+	/* ASCII-only, locale agnostic strncasecmp */
+	while (diff == 0 && alen > 0 && blen > 0) {
+		diff = (*a++ & ~0x20) - (*b++ & ~0x20);
+		alen--;
+		blen--;
+	}
+
+	if (diff == 0) {
+		/* Identical so far: resolve mismatched lengths */
+		if (alen != 0) {
+			diff = (*a & ~0x20);
+		} else if (blen != 0) {
+			diff = -(*b & ~0x20);
+		}
+	}
+
+	return diff;
 }
 
 static struct rufl_character_set *rufl_init_alloc_plane(uint8_t index)
