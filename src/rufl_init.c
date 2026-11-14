@@ -183,7 +183,7 @@ static bool rufl_is_space(unsigned int u);
 static rufl_code rufl_init_scan_font_old(unsigned int font_index);
 static rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
 		const char *encoding, struct rufl_character_set *charset,
-		struct rufl_unicode_map *umap, unsigned int *last);
+		struct rufl_unicode_map *umap);
 static rufl_code rufl_init_populate_unicode_map(font_f f,
 		struct rufl_unicode_map *umap);
 static rufl_code rufl_init_read_encoding(font_f font,
@@ -1245,6 +1245,33 @@ static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	return rufl_OK;
 }
 
+static void mark_codepoint_present(struct rufl_character_set **planes,
+		uint32_t ucs4)
+{
+	const unsigned int plane = (ucs4 >> 16) & 0x1f;
+	const unsigned int blk = (ucs4 >> 8) & 0xff;
+	const unsigned int byte = (ucs4 >> 3) & 31;
+	const unsigned int bit = ucs4 & 7;
+
+	/* Allocate block, if it's currently empty */
+	if (planes[plane]->index[blk] == BLOCK_EMPTY) {
+		unsigned int last_used = PLANE_SIZE(planes[plane]->metadata);
+		if (last_used < BLOCK_EMPTY) {
+			planes[plane]->index[blk] = last_used;
+			planes[plane]->metadata =
+				(planes[plane]->metadata & 0xffff0000) |
+				(last_used + 1);
+		}
+	}
+
+	/* Set bit for codepoint in bitmap, if bitmap exists */
+	if (planes[plane]->index[blk] < BLOCK_EMPTY) {
+		planes[plane]->block[
+			planes[plane]->index[blk]
+		][byte] |= 1 << bit;
+	}
+}
+
 struct find_glyph_ctx {
 	const char *font_name;
 	font_f font;
@@ -1299,30 +1326,7 @@ static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 		 * fonts do this) */
 	} else {
 		/* present */
-		const unsigned int plane = (ucs4 >> 16) & 0x1f;
-		const unsigned int blk = (ucs4 >> 8) & 0xff;
-		const unsigned int byte = (ucs4 >> 3) & 31;
-		const unsigned int bit = ucs4 & 7;
-
-		/* Allocate block, if it's currently empty */
-		if (ctx->planes[plane]->index[blk] == BLOCK_EMPTY) {
-			unsigned int last_used =
-				PLANE_SIZE(ctx->planes[plane]->metadata);
-			if (last_used < BLOCK_EMPTY) {
-				ctx->planes[plane]->index[blk] = last_used;
-				ctx->planes[plane]->metadata =
-					(ctx->planes[plane]->metadata &
-					 0xffff0000) |
-					(last_used + 1);
-			}
-		}
-
-		/* Set bit for codepoint in bitmap, if bitmap exists */
-		if (ctx->planes[plane]->index[blk] < BLOCK_EMPTY) {
-			ctx->planes[plane]->block[
-				ctx->planes[plane]->index[blk]
-			][byte] |= 1 << bit;
-		}
+		mark_codepoint_present(ctx->planes, ucs4);
 	}
 
 	return rufl_OK;
@@ -1436,7 +1440,6 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 	struct rufl_unicode_map *umap = NULL;
 	unsigned int num_umaps = 0;
 	unsigned int i;
-	unsigned int last_used = 0;
 	rufl_code code;
 	font_list_context context = 0;
 	char encoding[80];
@@ -1487,7 +1490,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		num_umaps++;
 
 		code = rufl_init_scan_font_in_encoding(font_name, encoding,
-				charset, umap + (num_umaps - 1), &last_used);
+				charset, umap + (num_umaps - 1));
 		/* Not finding the font isn't fatal */
 		if (code == rufl_FONT_MANAGER_ERROR &&
 				(rufl_fm_error->errnum ==
@@ -1554,7 +1557,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		num_umaps++;
 
 		code = rufl_init_scan_font_in_encoding(font_name, NULL,
-				charset, umap, &last_used);
+				charset, umap);
 		/* Not finding the font isn't fatal */
 		if (code == rufl_FONT_MANAGER_ERROR &&
 				(rufl_fm_error->errnum ==
@@ -1593,10 +1596,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		return rufl_OK;
 	}
 
-	/* Shrink-wrap. We only have the one plane so fill in last_used
-	 * as expected by the shrinkwrapping helper and then resize the
-	 * resulting charset manually. */
-	charset->metadata = (charset->metadata & 0xffff0000) | last_used;
+	/* Shrink-wrap. */
 	rufl_init_shrinkwrap_plane(charset);
 	charset2 = realloc(charset, PLANE_SIZE(charset->metadata));
 	if (!charset2) {
@@ -1621,13 +1621,11 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 
 rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
 		const char *encoding, struct rufl_character_set *charset,
-		struct rufl_unicode_map *umap, unsigned int *last)
+		struct rufl_unicode_map *umap)
 {
 	char string[2] = { 0, 0 };
 	int x_out, y_out;
-	unsigned int byte, bit;
 	unsigned int i;
-	unsigned int last_used = *last;
 	unsigned int u;
 	rufl_code code;
 	font_f font;
@@ -1701,18 +1699,7 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 			 * fonts do this) */
 		} else {
 			/* present */
-			if (charset->index[u >> 8] == BLOCK_EMPTY) {
-				charset->index[u >> 8] = last_used;
-				last_used++;
-				if (last_used == 254)
-					/* too many characters */
-					break;
-			}
-
-			byte = (u >> 3) & 31;
-			bit = u & 7;
-			charset->block[charset->index[u >> 8]][byte] |= 
-					1 << bit;
+			mark_codepoint_present(&charset, u);
 		}
 	}
 
@@ -1730,8 +1717,6 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 		if (!umap->encoding)
 			return rufl_OUT_OF_MEMORY;
 	}
-
-	*last = last_used;
 
 	return rufl_OK;
 }
