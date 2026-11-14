@@ -8,6 +8,7 @@
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
 #include <oslib/osfile.h>
+#include <oslib/osfscontrol.h>
 #include <oslib/taskwindow.h>
 #include <oslib/wimp.h>
 #include <oslib/wimpreadsysinfo.h>
@@ -693,7 +694,7 @@ os_error *xos_read_mode_variable (os_mode mode, os_mode_var var, int *var_val,
 
 /****************************************************************************/
 
-os_error *xosfile_read_stamped_no_path(char const *file_name,
+os_error *xosfile_read_stamped_no_path (char const *file_name,
 		fileswitch_object_type *obj_type, bits *load_addr,
 		bits *exec_addr, int *size, fileswitch_attr *attr,
 		bits *file_type)
@@ -761,6 +762,70 @@ os_error *xosfile_read_stamped_no_path(char const *file_name,
 
 	if (file_type != NULL)
 		*file_type = ftype;
+
+	return NULL;
+}
+
+os_error *xosfscontrol_canonicalise_path (char const *path_name, char *buffer,
+		char const *var, char const *path, int size, int *spare)
+{
+	const char *prefix = "Resources:$.Fonts.";
+	const char *dot, *canon;
+	size_t prefix_len = strlen(prefix);
+	size_t fidx, idlen;
+	int len;
+
+	if (path_name == NULL || (buffer == NULL && size != 0))
+		return &bad_parameters;
+
+	dot = strrchr(path_name, '.');
+	/* Absolute path expansion only */
+	if (var != NULL || path != NULL || dot == NULL)
+		return &unimplemented;
+
+	/* Only support expansion of trailing wildcards (and even then,
+	 * only for IntMet*) */
+	if (strncasecmp(path_name, prefix, prefix_len) != 0 ||
+			strcasecmp(dot+1, "IntMet*") != 0)
+		return &unimplemented;
+
+	idlen = dot - (path_name + prefix_len);
+	char identifier[idlen + 1];
+
+	/* Determine if we know about this font */
+	memcpy(identifier, path_name + prefix_len, idlen);
+	identifier[idlen] = 0;
+	for (fidx = 0; fidx < h->n_font_names; fidx++) {
+		if (strcasecmp(identifier, h->font_names[fidx]) == 0)
+			break;
+	}
+	if (fidx == h->n_font_names) {
+		/* Unknown font: simply leave the input unchanged */
+		canon = dot+1;
+	} else if (h->font_properties != NULL &&
+			h->font_properties[fidx].is_symbol) {
+		/* We have a Symbol font */
+		canon = "IntMetrics";
+	} else {
+		/* We have a Language font (assume /Base0 for now) */
+		canon = "IntMetric0";
+	}
+
+	len = (int) (((dot + 1) - path_name) + strlen(canon) + 1);
+
+	if (buffer != NULL && size < len)
+		return &buff_overflow;
+
+	if (buffer != NULL) {
+		memcpy(buffer, path_name, (dot + 1) - path_name);
+		strcpy(buffer + ((dot + 1) - path_name), canon);
+		/* Deduct the terminal NUL so that spare reports
+		 * the right answer */
+		len -= 1;
+	}
+
+	if (spare != NULL)
+		*spare = size - len;
 
 	return NULL;
 }

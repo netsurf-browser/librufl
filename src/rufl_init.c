@@ -20,6 +20,7 @@
 #include <oslib/hourglass.h>
 #include <oslib/os.h>
 #include <oslib/osfile.h>
+#include <oslib/osfscontrol.h>
 #include <oslib/taskwindow.h>
 #include <oslib/wimp.h>
 #include <oslib/wimpreadsysinfo.h>
@@ -516,58 +517,92 @@ rufl_code rufl_init_font_list(void)
 	return rufl_OK;
 }
 
-static rufl_code rufl_init_font_may_substitute(struct rufl_font_list_entry *f,
+static rufl_code rufl_init_font_inspect_fm_type(struct rufl_font_list_entry *f,
 		char prefix[1024], char *prefix_end)
 {
+	const char *p;
+	int size, spare;
 	fileswitch_object_type obj_type;
 
-	/* Prevent use of undesireable fonts for substitution */
-	if (f->slant || f->smallcaps) {
-		f->may_substitute = false;
+	/* Set a sensible default */
+	f->fm_type = rufl_FM_FONT_TYPE_SYMBOL_NO_ENCODING;
+
+	/* Ensure that the buffer has sufficient remaining space */
+	if (prefix_end - prefix > 1024 - 10) {
+		LOG("rufl_init_font_may_substitute: %s",
+				"Insufficient buffer space");
+		return rufl_OUT_OF_MEMORY;
+	}
+
+	/* Look for an IntMetrics file. We follow the same logic as the
+	 * UCS Font Manager and search for the first thing matching "IntMet*"
+	 * rather than doing the old thing of looking for an Encoding
+	 * file, consulting its RISCOS_BasedOn flag and then looking
+	 * for the corresponding IntMetric<N> file, falling back to
+	 * bare IntMetrics by default.
+	 */
+	strncpy(prefix_end, "IntMet*", 1024 - (prefix_end - prefix) - 1);
+	prefix[1024 - 1] = 0;
+
+	rufl_fm_error = xosfscontrol_canonicalise_path(prefix, 0, 0, 0, 0,
+			&size);
+	if (rufl_fm_error) {
+		LOG("xosfscontrol_canonicalise_path(\"%s\", ...): 0x%08x: %s",
+				prefix, rufl_fm_error->errnum,
+				rufl_fm_error->errmess);
+		return rufl_OK;
+	}
+	/* size is -(space required - 1) so negate and add 1 */
+	size = -size + 1;
+
+	char fullpath[size];
+	rufl_fm_error = xosfscontrol_canonicalise_path(prefix, fullpath, 0,
+			0, size, &spare);
+	if (rufl_fm_error) {
+		LOG("xosfscontrol_canonicalise_path(\"%s\", ...): 0x%08x: %s",
+				prefix, rufl_fm_error->errnum,
+				rufl_fm_error->errmess);
 		return rufl_OK;
 	}
 
-	/* Determine if this font is eligible fo use in subsitution */
-	/* Look for an IntMetrics file */
-	strncpy(prefix_end, "IntMetrics", 1024 - (prefix_end - prefix) - 1);
+	/* Inspect the filename suffix to distinguish between
+	 * Symbol and Language fonts */
+	for (p = fullpath + size - spare; p > fullpath; p--) {
+		if (*(p-1) < '0' || '9' < *(p-1))
+			break;
+	}
+	if (p < fullpath + size - spare) {
+		/* Language font: compute BaseN */
+		int base = 0;
+		while (*p != '\0') {
+			base = (base * 10) + (*p - '0');
+			p++;
+		}
+		if (base == 0) {
+			f->fm_type = rufl_FM_FONT_TYPE_LANGUAGE_BASE0;
+		} else {
+			f->fm_type = rufl_FM_FONT_TYPE_LANGUAGE_BASEN;
+		}
+		return rufl_OK;
+	}
+
+	/* An IntMetrics file exists, so this is a symbol font.
+	 * Does it have an Encoding file? */
+	strncpy(prefix_end, "Encoding",
+			1024 - (prefix_end - prefix) - 1);
 	prefix[1024 - 1] = 0;
 
 	rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
 			0, 0, 0, 0, 0);
 	if (rufl_fm_error) {
 		LOG("xosfile_read_stamped_no_path: 0x%x: %s",
-				rufl_fm_error->errnum, rufl_fm_error->errmess);
+				rufl_fm_error->errnum,
+				rufl_fm_error->errmess);
 		return rufl_IO_ERROR;
 	}
 
 	if (obj_type == osfile_IS_FILE) {
-		/* An IntMetrics file exists, so this is a symbol font.
-		 * Does it have an Encoding file? */
-		strncpy(prefix_end, "Encoding",
-				1024 - (prefix_end - prefix) - 1);
-		prefix[1024 - 1] = 0;
-
-		rufl_fm_error = xosfile_read_stamped_no_path(prefix, &obj_type,
-				0, 0, 0, 0, 0);
-		if (rufl_fm_error) {
-			LOG("xosfile_read_stamped_no_path: 0x%x: %s",
-					rufl_fm_error->errnum,
-					rufl_fm_error->errmess);
-			return rufl_IO_ERROR;
-		}
-
-		/* Many "symbol" fonts have no Encoding file so the charset
-		 * determined by scanning (or loaded from the cache) will
-		 * reflect the contents of the /Default (UCS FM) or Latin1
-		 * (old FM) encodings. This is as good an answer as anything
-		 * for this font itself but mark it ineligible for inclusion
-		 * in the substitution tables if it has no Encoding file
-		 * (as the charset is speculative, at best) */
-		f->may_substitute = (obj_type == osfile_IS_FILE);
-	} else {
-		/* No IntMetrics file, so this is a language font.
-		 * These are always eligible for substitution. */
-		f->may_substitute = true;
+		f->fm_type = rufl_FM_FONT_TYPE_SYMBOL_WITH_ENCODING;
 	}
 
 	return rufl_OK;
@@ -774,8 +809,8 @@ static rufl_code rufl_init_categorise_font(const char *identifier,
 		return code;
 	}
 
-	/* Determine if this font may be used for substitution */
-	code = rufl_init_font_may_substitute(f, prefix, prefix_end);
+	/* Determine the Font Manager type of this font */
+	code = rufl_init_font_inspect_fm_type(f, prefix, prefix_end);
 	if (code != rufl_OK) {
 		return code;
 	}

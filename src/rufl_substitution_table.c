@@ -972,8 +972,22 @@ static rufl_code create_substitution_table_for_plane(unsigned int plane)
 	num_charsets = 0;
 	for (i = 0; i != rufl_font_list_entries; i++) {
 		charset = rufl_font_list[i].charset;
-		if (!charset || !rufl_font_list[i].may_substitute) {
-			/* Either no charset or banned from use as substitute */
+
+		/* Skip fonts with no charset or those we wish to exclude
+		 * from the substitution tables for other reasons.
+		 *
+		 * The charset of Symbol fonts with no Encoding file reflects
+		 * the contents of the /Default (UCS FM) or Latin1 (old FM)
+		 * encodings. This is as good an answer as anything for the
+		 * font itself but do not include its contents in the
+		 * substitution tables (as the charset is speculative, at best)
+		 *
+		 * Additionally, ignore slanted or smallcaps fonts.
+		 */
+		if (!charset || rufl_font_list[i].fm_type ==
+				rufl_FM_FONT_TYPE_SYMBOL_NO_ENCODING ||
+				rufl_font_list[i].slant ||
+				rufl_font_list[i].smallcaps) {
 			charsets[i] = NULL;
 			continue;
 		}
