@@ -121,6 +121,25 @@ struct rufl_unicode_map {
 	struct rufl_unicode_map_entry map[256];
 };
 
+/** Font Manager font type */
+typedef enum {
+	/* These values are structured such that:
+	 *  * bit0 clear means "default encoding" (where "default"
+	 *    for Language fonts is /Base0 and for Symbol fonts is
+	 *    either /Default (UCS) or direct glyph indexing (non-UCS)
+	 *  * bit0 set means a country-specific encoding (for Language
+	 *    fonts) or the presence of an explicit Encoding (for Symbol fonts)
+	 *  * bit1 clear means Language font
+	 *  * bit1 set means Symbol font
+	 *
+	 * This allows us to easily differentiate between the font types
+	 * (and also identify those Language fonts using /Base0 where needed)
+	 */
+	rufl_FM_FONT_TYPE_LANGUAGE_BASE0 = 0,
+	rufl_FM_FONT_TYPE_LANGUAGE_BASEN,
+	rufl_FM_FONT_TYPE_SYMBOL_NO_ENCODING,
+	rufl_FM_FONT_TYPE_SYMBOL_WITH_ENCODING,
+} rufl_fm_font_type;
 
 /** An entry in rufl_font_list. */
 struct rufl_font_list_entry {
@@ -139,8 +158,8 @@ struct rufl_font_list_entry {
 	uint32_t weight: 4;
 	/** Font slant (0 or 1). */
 	uint32_t slant: 1;
-	/** Whether this font can be used for substitution (0 or 1) */
-	uint32_t may_substitute: 1;
+	/** Font Manager font type (0 to 3) c.f rufl_fm_font_type */
+	uint32_t fm_type : 2;
 	/* Whether the identifier has components unknown to RUfl (0 or 1) */
 	uint32_t special : 1;
 };
