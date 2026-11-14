@@ -302,6 +302,35 @@ extern const struct rufl_glyph_map_entry rufl_glyph_map[];
 extern const size_t rufl_glyph_map_size;
 
 
+/** Type of a rufl_pua_map entry. This may look like a bitfield but isn't */
+typedef enum {
+	rufl_PUA_TYPE_CAP   = 0x01,
+	rufl_PUA_TYPE_DENOM = 0x02,
+	rufl_PUA_TYPE_FONT  = 0x04,
+	rufl_PUA_TYPE_NUMER = 0x08,
+	rufl_PUA_TYPE_OSF   = 0x10,
+	rufl_PUA_TYPE_SUB   = 0x20,
+	rufl_PUA_TYPE_SUPER = 0x40,
+	rufl_PUA_TYPE_SC    = 0x80,
+} rufl_pua_type;
+
+struct rufl_pua_map_entry {
+	/* The PUA map contains codepoints in the BMP only. */
+	uint16_t type; /** Entry type (c.f. rufl_pua_type) */
+	uint16_t u; /** Standardised codepoint */
+	uint16_t p; /** PUA codepoint */
+};
+/** Map from standardised codepoint and type to assignment in the
+ * Private Use Area.
+ *
+ * The map is sorted by the tuple of (type, standardised codepoint).
+ * There may be multiple entries per key.
+ *
+ * This permits selection of glyphic variants where appropriate to do so. */
+extern const struct rufl_pua_map_entry rufl_pua_map[];
+extern const size_t rufl_pua_map_size;
+
+
 #if 1 /*ndef NDEBUG*/
 #include <time.h>
 extern bool rufl_log_got_start_time;

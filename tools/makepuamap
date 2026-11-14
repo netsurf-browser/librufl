@@ -1,0 +1,73 @@
+#!/usr/bin/perl -W
+
+%flags = (
+	"<compat>" => 0x00, # otherwise unspecified compatibility character
+	"<cap>"    => 0x01, # accent/punctuation for capital letters
+	"<denom>"  => 0x02, # denominator
+	"<font>"   => 0x04, # font variant
+	"<numer>"  => 0x08, # numerator
+	"<osf>"    => 0x10, # old style figure
+	"<sub>"    => 0x20, # subscript
+	"<super>"  => 0x40, # superscript
+	"<sc>"     => 0x80, # small caps
+);
+%name = ();
+
+print "#include <stdlib.h>\n";
+print "#include \"rufl_internal.h\"\n";
+# Emit static assertions to ensure that flags are mapped correctly
+while (($n, $v) = each %flags) {
+	if ($v != 0 and $n =~ /^<([a-z]+)>$/) {
+		$n = uc $1;
+		$v = sprintf "0x%02x", $v;
+		print "extern char rufl_pua_type_${n}_mismatched";
+		print "[rufl_PUA_TYPE_${n} == ${v} ? 1 : -1];\n";
+	}
+}
+print "const struct rufl_pua_map_entry rufl_pua_map[] = {\n";
+
+while (<>) {
+	if (/^([0-9A-F]{4});[^;]*;[A-Z -]+(;([<>a-zA-Z0-9 ]+))?/) {
+		if (not (defined $2 and defined $3)) {
+			# Codepoint maps (canonically) to itself
+			$name{"$1:$1"} = 1;
+		} else {
+			$name{"$1:$3"} = 1;
+		}
+	}
+}
+
+@glyph = ();
+while (($un, ) = each %name) {
+	($u, $n) = split ':', $un;
+	if ($n =~ /^</) {
+		# Compatibility mapping
+
+		# Collect tags
+	        @parts = split ' ', $n;
+		$bits = 0;
+		while ($parts[0] =~ /^</) {
+			$flag = shift @parts;
+			$bits |= $flags{$flag} if exists $flags{$flag};
+		}
+
+		# Ignore generic compatibility mappings and mappings
+		# that decompose to more than one codepoint
+		if ($bits != 0 and @parts == 1) {
+			$bits = sprintf "%02x", $bits;
+			push @glyph, [$bits, $parts[0], $u];
+		}
+	} else {
+		# Canonical mapping: ignore
+	}
+}
+
+foreach $z (sort {
+		$$a[0] cmp $$b[0] or $$a[1] cmp $$b[1] or $$a[2] cmp $$b[2]
+		} @glyph) {
+	print "\t{0x$$z[0], 0x$$z[1], 0x$$z[2]},\n";
+}
+
+print "};\n";
+print "const size_t rufl_pua_map_size = sizeof rufl_pua_map /\n";
+print "		sizeof rufl_pua_map[0];\n";
