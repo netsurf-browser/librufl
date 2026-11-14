@@ -182,7 +182,8 @@ static rufl_code rufl_init_scan_font(unsigned int font);
 static bool rufl_is_space(unsigned int u);
 static rufl_code rufl_init_scan_font_old(unsigned int font_index);
 static rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
-		const char *encoding, struct rufl_character_set *charset,
+		const char *encoding, const struct rufl_font_list_entry *f,
+		struct rufl_character_set *charset,
 		struct rufl_unicode_map *umap);
 static rufl_code rufl_init_populate_unicode_map(font_f f,
 		struct rufl_unicode_map *umap);
@@ -1245,6 +1246,15 @@ static rufl_code find_plane_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 	return rufl_OK;
 }
 
+int rufl_pua_map_entry_cmp(const void *keyval, const void *datum)
+{
+	const struct rufl_pua_map_entry *key = keyval;
+	const struct rufl_pua_map_entry *entry = datum;
+	int a = ((key->type << 16) | key->u);
+	int b = ((entry->type << 16) | entry->u);
+	return a - b;
+}
+
 static void mark_codepoint_present(struct rufl_character_set **planes,
 		uint32_t ucs4)
 {
@@ -1272,8 +1282,42 @@ static void mark_codepoint_present(struct rufl_character_set **planes,
 	}
 }
 
+static void mark_glyph_variants_present(struct rufl_character_set **planes,
+	const struct rufl_font_list_entry *f, uint32_t ucs4)
+{
+	/* Mark the primary codepoint present */
+	mark_codepoint_present(planes, ucs4);
+
+	/* Then consider glyph variants (relevant to BMP only) */
+	if (ucs4 <= 0xffff && f->smallcaps &&
+			!rufl_FM_FONT_TYPE_HAS_ENCODING(f->fm_type)) {
+		/* Small caps font variant without an explicit encoding
+		 * (or using /Base0 which we know doesn't map any glyphs
+		 * into the small caps PUA codepoints): mark the relevant
+		 * small caps PUA codepoint(s) present as well. */
+		struct rufl_pua_map_entry k = {rufl_PUA_TYPE_SC, ucs4, 0};
+		struct rufl_pua_map_entry *entry;
+		entry = bsearch(&k, rufl_pua_map, rufl_pua_map_size,
+				sizeof rufl_pua_map[0], rufl_pua_map_entry_cmp);
+		if (entry) {
+			/* There may be more than one entry for the key. */
+			while (entry >= rufl_pua_map &&
+					rufl_pua_map_entry_cmp(&k,
+						entry) == 0) {
+				entry--;
+			}
+			while (++entry < &rufl_pua_map[rufl_pua_map_size] &&
+					rufl_pua_map_entry_cmp(&k,
+						entry) == 0) {
+				mark_codepoint_present(planes, entry->p);
+			}
+		}
+	}
+}
+
 struct find_glyph_ctx {
 	const char *font_name;
+	const struct rufl_font_list_entry *f;
 	font_f font;
 	struct rufl_character_set **planes;
 };
@@ -1326,7 +1370,7 @@ static rufl_code find_glyph_cb(void *pw, uint32_t glyph_idx, uint32_t ucs4)
 		 * fonts do this) */
 	} else {
 		/* present */
-		mark_codepoint_present(ctx->planes, ucs4);
+		mark_glyph_variants_present(ctx->planes, ctx->f, ucs4);
 	}
 
 	return rufl_OK;
@@ -1384,6 +1428,7 @@ rufl_code rufl_init_scan_font(unsigned int font_index)
 
 	/* Second pass: populate the planes */
 	ctx.font_name = font_name;
+	ctx.f = &rufl_font_list[font_index];
 	ctx.font = font;
 	ctx.planes = planes;
 
@@ -1490,6 +1535,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		num_umaps++;
 
 		code = rufl_init_scan_font_in_encoding(font_name, encoding,
+				&rufl_font_list[font_index],
 				charset, umap + (num_umaps - 1));
 		/* Not finding the font isn't fatal */
 		if (code == rufl_FONT_MANAGER_ERROR &&
@@ -1557,7 +1603,7 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
 		num_umaps++;
 
 		code = rufl_init_scan_font_in_encoding(font_name, NULL,
-				charset, umap);
+				&rufl_font_list[font_index], charset, umap);
 		/* Not finding the font isn't fatal */
 		if (code == rufl_FONT_MANAGER_ERROR &&
 				(rufl_fm_error->errnum ==
@@ -1620,7 +1666,8 @@ rufl_code rufl_init_scan_font_old(unsigned int font_index)
  */
 
 rufl_code rufl_init_scan_font_in_encoding(const char *font_name, 
-		const char *encoding, struct rufl_character_set *charset,
+		const char *encoding, const struct rufl_font_list_entry *f,
+		struct rufl_character_set *charset,
 		struct rufl_unicode_map *umap)
 {
 	char string[2] = { 0, 0 };
@@ -1699,7 +1746,7 @@ rufl_code rufl_init_scan_font_in_encoding(const char *font_name,
 			 * fonts do this) */
 		} else {
 			/* present */
-			mark_codepoint_present(&charset, u);
+			mark_glyph_variants_present(&charset, f, u);
 		}
 	}
 

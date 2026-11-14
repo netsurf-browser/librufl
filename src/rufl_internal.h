@@ -147,6 +147,8 @@ typedef enum {
 	rufl_FM_FONT_TYPE_SYMBOL_NO_ENCODING,
 	rufl_FM_FONT_TYPE_SYMBOL_WITH_ENCODING,
 } rufl_fm_font_type;
+#define rufl_FM_FONT_TYPE_IS_SYMBOL(t) (t & 0x10)
+#define rufl_FM_FONT_TYPE_HAS_ENCODING(t) (t & 0x01)
 
 /* Flags for internal use only. Public flags start at bit 8. */
 #define rufl_FLAG_CAPS 0x0001 /* Use capitals for lower-case */
@@ -334,6 +336,7 @@ struct rufl_pua_map_entry {
  * This permits selection of glyphic variants where appropriate to do so. */
 extern const struct rufl_pua_map_entry rufl_pua_map[];
 extern const size_t rufl_pua_map_size;
+int rufl_pua_map_entry_cmp(const void *keyval, const void *datum);
 
 
 #if 1 /*ndef NDEBUG*/
