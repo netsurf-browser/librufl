@@ -164,6 +164,18 @@ rufl_code rufl_select_font_and_codepoint(unsigned int ucs4,
 	charset_current = (current_font == NOT_AVAILABLE)
 			? NULL : rufl_font_list[current_font].charset;
 
+	/* Force all client-provided codepoints in the range [U+E000,U+F8FF]
+	 * to be treated as missing (this is the Unicode Private Use area
+	 * and its contents are implementation defined and non-portable;
+	 * therefore, no client should be using these codepoints -- we're
+	 * using them internally for glyphic variant mapping, as per Adobe
+	 * circa 1998). */
+	if (0xe000 <= ucs4 && ucs4 <= 0xf8ff) {
+		*selected_font = NOT_AVAILABLE;
+		*codepoint = ucs4;
+		return rufl_OK;
+	}
+
 	if (ucs4 <= 0x001f || (0x007f <= ucs4 && ucs4 <= 0x009f)) {
 		current_font = NOT_AVAILABLE;
 	} else if (charset_preferred &&
