@@ -150,6 +150,39 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 }
 
 
+static rufl_code select_font_and_codepoint(unsigned int ucs4,
+		unsigned int preferred_font, unsigned int current_font,
+		rufl_style font_style, unsigned int *selected_font,
+		unsigned int *codepoint)
+{
+	const struct rufl_character_set *charset_preferred, *charset_current;
+	rufl_code code = rufl_OK;
+
+	charset_preferred = (preferred_font == NOT_AVAILABLE)
+			? NULL : rufl_font_list[preferred_font].charset;
+	charset_current = (current_font == NOT_AVAILABLE)
+			? NULL : rufl_font_list[current_font].charset;
+
+	if (ucs4 <= 0x001f || (0x007f <= ucs4 && ucs4 <= 0x009f)) {
+		current_font = NOT_AVAILABLE;
+	} else if (charset_preferred &&
+			rufl_character_set_test(charset_preferred, ucs4)) {
+		current_font = preferred_font;
+	} else if (current_font == preferred_font || !charset_current ||
+			!rufl_character_set_test(charset_current, ucs4)) {
+		code = rufl_find_alternate_font(ucs4, font_style,
+				&current_font);
+	}
+
+	if (code == rufl_OK) {
+		*selected_font = current_font;
+		*codepoint = ucs4;
+	}
+
+	return code;
+}
+
+
 /**
  * Render, measure, or split Unicode text.
  */
@@ -172,7 +205,6 @@ rufl_code rufl_process(rufl_action action,
 	size_t offset_map[rufl_PROCESS_CHUNK];
 	unsigned int slant;
 	const uint8_t *string = string0;
-	struct rufl_character_set *charset, *charset0;
 	rufl_code code;
 
 	assert(action == rufl_PAINT ||
@@ -206,7 +238,7 @@ rufl_code rufl_process(rufl_action action,
 	}
 
 	code = rufl_find_font_family(font_family, font_style,
-			&font, &slant, &charset);
+			&font, &slant, NULL);
 	if (code != rufl_OK)
 		return code;
 
@@ -224,41 +256,26 @@ rufl_code rufl_process(rufl_action action,
 
 	offset_u = 0;
 	rufl_utf8_read(string, length, u);
-	if (u <= 0x001f || (0x007f <= u && u <= 0x009f))
-		font1 = NOT_AVAILABLE;
-	else if (charset && rufl_character_set_test(charset, u))
-		font1 = font;
-	else {
-		code = rufl_find_alternate_font(u, font_style, &font1);
-		if (code != rufl_OK)
-			return code;
-	}
+	code = select_font_and_codepoint(u, font, NOT_AVAILABLE, font_style,
+			&font1, &u);
+	if (code != rufl_OK)
+		return code;
 
 	do {
 		s[0] = u;
 		offset_map[0] = offset_u;
 		n = 1;
 		font0 = font1;
-		charset0 = (font0 == NOT_AVAILABLE) ?
-				NULL : rufl_font_list[font0].charset;
 		/* invariant: s[0..n) is in font font0 */
 		while (0 < length && n < rufl_PROCESS_CHUNK && font1 == font0) {
 			offset_u = string - string0;
 			rufl_utf8_read(string, length, u);
+			code = select_font_and_codepoint(u, font, font0,
+					font_style, &font1, &u);
+			if (code != rufl_OK)
+				return code;
 			s[n] = u;
 			offset_map[n] = offset_u;
-			if (u <= 0x001f || (0x007f <= u && u <= 0x009f))
-				font1 = NOT_AVAILABLE;
-			else if (charset && rufl_character_set_test(charset, u))
-				font1 = font;
-			else if (font0 == font || !charset0 ||
-					!rufl_character_set_test(charset0, u))
-			{
-				code = rufl_find_alternate_font(u, font_style,
-						&font1);
-				if (code != rufl_OK)
-					return code;
-			}
 			if (font1 == font0)
 				n++;
 		}
