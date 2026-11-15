@@ -150,9 +150,6 @@ typedef enum {
 #define rufl_FM_FONT_TYPE_IS_SYMBOL(t) (t & 0x10)
 #define rufl_FM_FONT_TYPE_HAS_ENCODING(t) (t & 0x01)
 
-/* Flags for internal use only. Public flags start at bit 8. */
-#define rufl_FLAG_CAPS 0x0001 /* Use capitals for lower-case */
-
 /** An entry in rufl_font_list. */
 struct rufl_font_list_entry {
 	/** Font identifier (name). */

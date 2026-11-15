@@ -149,6 +149,70 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 			0, 0, 0, 0, (int *) bbox, 0, 0, 0, 0, 0);
 }
 
+static unsigned int next_glyphic_variant(unsigned int ucs4,
+		rufl_style font_style, void **ctx)
+{
+	struct rufl_pua_map_entry k = {0, ucs4, 0};
+	struct rufl_pua_map_entry *entry;
+
+	/* Compute the type of glyphic variant we want */
+	if (font_style & rufl_FLAG_CAPS) {
+		k.type = rufl_PUA_TYPE_SC;
+	}
+
+	/* Find the next relevant entry (if any) in the PUA map */
+	if (*ctx == NULL) {
+		/* First call: search the map and choose the first match */
+		entry = bsearch(&k, rufl_pua_map, rufl_pua_map_size,
+				sizeof rufl_pua_map[0],
+				rufl_pua_map_entry_cmp);
+		if (entry) {
+			/* There may be more than one entry for the key. */
+			while (entry >= rufl_pua_map && rufl_pua_map_entry_cmp(
+					&k, entry) == 0) {
+				entry--;
+			}
+			entry++;
+		}
+	} else {
+		/* Subsequent call: advance to next entry */
+		entry = ((struct rufl_pua_map_entry *) *ctx) + 1;
+	}
+
+	if (entry != NULL && entry < &rufl_pua_map[rufl_pua_map_size] &&
+			rufl_pua_map_entry_cmp(&k, entry) == 0) {
+		/* We found a relevant glyphic variant: use it */
+		ucs4 = entry->p;
+	} else {
+		/* Found nothing: invalidate entry */
+		entry = NULL;
+	}
+
+	/* Update the context for next time */
+	*ctx = entry;
+
+	return ucs4;
+}
+
+static unsigned int codepoint_to_process(unsigned int ucs4,
+		unsigned int alternate, unsigned int font)
+{
+	/* Determine the codepoint to process using the given font. */
+	const struct rufl_font_list_entry *f = (font == NOT_AVAILABLE)
+			? NULL: &rufl_font_list[font];
+
+	if (alternate != ucs4 && ucs4 < 0xffff && f && f->smallcaps &&
+			!rufl_FM_FONT_TYPE_HAS_ENCODING(f->fm_type)) {
+		/* BMP codepoint and small caps font variant without an
+		 * explicit encoding (or using /Base0 which we know
+		 * doesn't map any glyphs into the small caps PUA codepoints):
+		 * use the standardised ucs4 codepoint (which is where
+		 * these fonts provide the relevant glyph). */
+		alternate = ucs4;
+	}
+
+	return alternate;
+}
 
 static rufl_code select_font_and_codepoint(unsigned int ucs4,
 		unsigned int preferred_font, unsigned int current_font,
@@ -156,6 +220,8 @@ static rufl_code select_font_and_codepoint(unsigned int ucs4,
 		unsigned int *codepoint)
 {
 	const struct rufl_character_set *charset_preferred, *charset_current;
+	void *ngvctx = NULL;
+	const unsigned int ucs4_in = ucs4;
 	rufl_code code = rufl_OK;
 
 	charset_preferred = (preferred_font == NOT_AVAILABLE)
@@ -163,20 +229,31 @@ static rufl_code select_font_and_codepoint(unsigned int ucs4,
 	charset_current = (current_font == NOT_AVAILABLE)
 			? NULL : rufl_font_list[current_font].charset;
 
-	if (ucs4 <= 0x001f || (0x007f <= ucs4 && ucs4 <= 0x009f)) {
-		current_font = NOT_AVAILABLE;
-	} else if (charset_preferred &&
-			rufl_character_set_test(charset_preferred, ucs4)) {
-		current_font = preferred_font;
-	} else if (current_font == preferred_font || !charset_current ||
-			!rufl_character_set_test(charset_current, ucs4)) {
-		code = rufl_find_alternate_font(ucs4, font_style,
-				&current_font);
-	}
+	/* Consider the relevant glyphic variants (if any) until we
+	 * find a font to provide one, falling back to NOT_AVAILABLE
+	 * if no font can be found. */
+	do {
+		ucs4 = next_glyphic_variant(ucs4_in, font_style, &ngvctx);
+
+		if (ucs4 <= 0x001f || (0x007f <= ucs4 && ucs4 <= 0x009f)) {
+			current_font = NOT_AVAILABLE;
+		} else if (charset_preferred && rufl_character_set_test(
+				charset_preferred, ucs4)) {
+			current_font = preferred_font;
+		//XXX: consider alternate faces within preferred & current
+		} else if (current_font == preferred_font || !charset_current ||
+				!rufl_character_set_test(charset_current,
+					ucs4)) {
+			code = rufl_find_alternate_font(ucs4, font_style,
+					&current_font);
+		}
+	} while (code == rufl_OK &&
+			current_font == NOT_AVAILABLE &&
+			ucs4 != ucs4_in);
 
 	if (code == rufl_OK) {
 		*selected_font = current_font;
-		*codepoint = ucs4;
+		*codepoint = codepoint_to_process(ucs4_in, ucs4, current_font);
 	}
 
 	return code;
