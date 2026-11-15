@@ -367,7 +367,7 @@ static rufl_code rufl_init_add_family_map_entry(struct rufl_font_list_entry *f,
 	rufl_code code = rufl_OK;
 
 	rufl_family_map_entry_populate(&e, famidx, f->weight, f->gwidth,
-			f->slant, 0 /*f->smallcaps*/, fidx);
+			f->slant, f->smallcaps, fidx);
 
 	fmentry = rufl_family_map_find(&e, rufl_family_map_cmp);
 
@@ -379,7 +379,7 @@ static rufl_code rufl_init_add_family_map_entry(struct rufl_font_list_entry *f,
 		code = rufl_family_map_append(&e);
 	} else if (!f->special) {
 		rufl_family_map_entry_populate(fmentry, famidx, f->weight,
-				f->gwidth, f->slant, 0 /*f->smallcaps*/, fidx);
+				f->gwidth, f->slant, f->smallcaps, fidx);
 	}
 
 	return code;
