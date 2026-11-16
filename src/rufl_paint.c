@@ -222,6 +222,7 @@ static rufl_code select_font_and_codepoint(unsigned int ucs4,
 	const struct rufl_character_set *charset_preferred, *charset_current;
 	void *ngvctx = NULL;
 	const unsigned int ucs4_in = ucs4;
+	unsigned int font1;
 	rufl_code code = rufl_OK;
 
 	charset_preferred = (preferred_font == NOT_AVAILABLE)
@@ -252,7 +253,20 @@ static rufl_code select_font_and_codepoint(unsigned int ucs4,
 		} else if (charset_preferred && rufl_character_set_test(
 				charset_preferred, ucs4)) {
 			current_font = preferred_font;
-		//XXX: consider alternate faces within preferred & current
+		} else if (charset_preferred && (code =
+				rufl_find_alternate_font_in_family(ucs4,
+					preferred_font, font_style,
+					&font1)) == rufl_OK &&
+				font1 != NOT_AVAILABLE) {
+			current_font = font1;
+		} else if (current_font != preferred_font &&
+				charset_current && !rufl_character_set_test(
+				charset_current, ucs4) && (code =
+				rufl_find_alternate_font_in_family(ucs4,
+					current_font, font_style,
+					&font1)) == rufl_OK &&
+				font1 != NOT_AVAILABLE) {
+			current_font = font1;
 		} else if (current_font == preferred_font || !charset_current ||
 				!rufl_character_set_test(charset_current,
 					ucs4)) {
