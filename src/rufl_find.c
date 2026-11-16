@@ -31,10 +31,15 @@ rufl_code rufl_find_alternate_font_in_family(unsigned int u,
 	struct rufl_family_map_entry_storage k;
 	const struct rufl_family_map_entry_storage *e;
 	const struct rufl_font_list_entry *f = &rufl_font_list[current_font];
+	unsigned int gwidth = ((font_style >> 4) & 0xf);
 	unsigned int weight = (font_style & 0xf) - 1;
-	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
+	unsigned int slant = (font_style & rufl_FLAG_SLANTED) ? 1 : 0;
 
-	rufl_family_map_entry_populate(&k, f->family, weight, slant, 0);
+	/* For backwards compatibility, map a gwidth of 0 to regular width */
+	gwidth = (gwidth == 0) ? 2 : gwidth - 1;
+
+	rufl_family_map_entry_populate(&k, f->family, weight, gwidth,
+			slant, 0, 0);
 
 	/* Search for the closest font within the same family as the
 	 * current font that can provide a glyph for the specified codepoint */
@@ -42,7 +47,8 @@ rufl_code rufl_find_alternate_font_in_family(unsigned int u,
 	if (e == NULL) {
 		*font = NOT_AVAILABLE;
 	} else {
-		rufl_family_map_entry_parse(e, NULL, NULL, NULL, font);
+		rufl_family_map_entry_parse(e, NULL, NULL, NULL, NULL, NULL,
+				font);
 	}
 
 	return rufl_OK;
@@ -56,13 +62,18 @@ rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 		unsigned int *font)
 {
 	unsigned int font1, font2;
+	unsigned int gwidth = ((font_style >> 4) & 0xf);
 	unsigned int weight = (font_style & 0xf) - 1;
 	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
 	rufl_code code;
 
+	/* For backwards compatibility, map a gwidth of 0 to regular width */
+	gwidth = (gwidth == 0) ? 2 : gwidth - 1;
+
 	font1 = rufl_substitution_table_lookup(u);
 	if (font1 != NOT_AVAILABLE &&
-			 (rufl_font_list[font1].weight != weight ||
+			(rufl_font_list[font1].gwidth != gwidth ||
+			 rufl_font_list[font1].weight != weight ||
 			 rufl_font_list[font1].slant != slant)) {
 		/* seek closer match, placing final answer in font1 */
 		code = rufl_find_alternate_font_in_family(u, font1, font_style,
@@ -104,7 +115,9 @@ static rufl_code rufl_find_font_family_by_identifier(const char *font_family,
 
 	*font = fe - rufl_font_list;
 	/* Manufacture the font_style implied by this font */
-	*font_style = (fe->slant ? rufl_SLANTED : 0) |
+	*font_style = (fe->smallcaps ? rufl_FLAG_CAPS : 0) |
+		(fe->slant ? rufl_FLAG_SLANTED : 0) |
+		((fe->gwidth + 1) << 4) |
 		(fe->weight + 1);
 
 	return rufl_OK;
@@ -118,7 +131,7 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 	struct rufl_family_map_entry_storage k;
 	const struct rufl_family_map_entry_storage *e;
 	const char **family;
-	uint32_t f, slant, weight;
+	uint32_t f, slant, weight, gwidth;
 
 	family = bsearch(font_family, rufl_family_list,
 			rufl_family_list_entries,
@@ -127,12 +140,18 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 	if (!family)
 		return rufl_FONT_NOT_FOUND;
 
+	gwidth = ((font_style >> 4) & 0xf);
+	/* For backwards compatibility, map a gwidth of 0 to regular width */
+	gwidth = (gwidth == 0) ? 2 : gwidth - 1;
+	assert(gwidth <= 4);
 	weight = (font_style & 0xf) - 1;
 	assert(weight <= 8);
-	slant = font_style & rufl_SLANTED ? 1 : 0;
+	slant = font_style & rufl_FLAG_SLANTED ? 1 : 0;
 
+	/* Note: we do not consider variant forms (e.g. smallcaps) here.
+	 * These will be handled, if appropriate, elsewhere. */
 	rufl_family_map_entry_populate(&k, family - rufl_family_list, weight,
-			slant, 0);
+			gwidth, slant, 0, 0);
 
 	/* Find an entry that matches the requested family and style */
 	e = rufl_family_map_find(&k, rufl_family_map_cmp);
@@ -143,7 +162,7 @@ static rufl_code rufl_find_font_family_by_family_and_style(
 			return rufl_FONT_NOT_FOUND;
 	}
 
-	rufl_family_map_entry_parse(e, NULL, NULL, NULL, &f);
+	rufl_family_map_entry_parse(e, NULL, NULL, NULL, NULL, NULL, &f);
 
 	*font = f;
 
