@@ -411,20 +411,21 @@ static struct rufl_family_map_entry_storage *find_closest(
 struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		const struct rufl_family_map_entry_storage *k)
 {
-	struct rufl_family_map_entry_storage target = {0};
+	struct rufl_family_map_entry_storage target;
 	struct rufl_family_map_entry_storage *e = &target;
 
 	/* Initialise target from client parameter, taking care to
 	 * copy only the amount of data guaranteed to be available. */
 	if (((struct rufl_family_map_entry_base *) k)->bits &
 			rufl_FAMILY_MAP_16bit) {
-		target = *k;
+		*((struct rufl_family_map_entry *) e) =
+				*((struct rufl_family_map_entry *) k);
 	} else {
-		target.val1 = k->val1;
-		target.val2 = 0;
+		*((struct rufl_family_map_entry_base *) e) =
+				*((struct rufl_family_map_entry_base *) k);
 	}
 	/* Neutralise bits that can never be searched for via this API */
-	((struct rufl_family_map_entry *) e)->base.bits &=
+	((struct rufl_family_map_entry_base *) e)->bits &=
 			~rufl_FAMILY_MAP_VARIANT_MASK;
 
 	e = find_closest(&target);
@@ -452,13 +453,14 @@ rufl_family_map_find_closest_with_codepoint(
 	 * copy only the amount of data guaranteed to be available. */
 	if (((struct rufl_family_map_entry_base *) k)->bits &
 			rufl_FAMILY_MAP_16bit) {
-		target = *k;
+		*((struct rufl_family_map_entry *) e1) =
+				*((struct rufl_family_map_entry *) k);
 	} else {
-		target.val1 = k->val1;
-		target.val2 = 0;
+		*((struct rufl_family_map_entry_base *) e1) =
+				*((struct rufl_family_map_entry_base *) k);
 	}
 	/* Clear client-provided variant bits, which cannot have effect here. */
-	((struct rufl_family_map_entry *) e1)->base.bits &=
+	((struct rufl_family_map_entry_base *) e1)->bits &=
 			~rufl_FAMILY_MAP_VARIANT_MASK;
 
 	/* Try without variant */
@@ -505,9 +507,15 @@ rufl_family_map_find_closest_with_codepoint(
 		struct rufl_family_map_entry_storage *e1n = &norm;
 		int d, d1;
 
-		norm.val1 = e1->val1;
-		norm.val2 = 0;
-		((struct rufl_family_map_entry *) e1n)->base.bits &=
+		if (((struct rufl_family_map_entry_base *) e1)->bits &
+				rufl_FAMILY_MAP_16bit) {
+			*((struct rufl_family_map_entry *) e1n) =
+					*((struct rufl_family_map_entry *) e1);
+		} else {
+			*((struct rufl_family_map_entry_base *) e1n) =
+				*((struct rufl_family_map_entry_base *) e1);
+		}
+		((struct rufl_family_map_entry_base *) e1n)->bits &=
 				~rufl_FAMILY_MAP_VARIANT_MASK;
 
 		d = rufl_family_map_cmp(e, &target);
