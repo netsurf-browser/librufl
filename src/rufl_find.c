@@ -21,6 +21,34 @@ static rufl_code rufl_place_in_cache(unsigned int font, unsigned int font_size,
 
 
 /**
+ * Find an alternate font in a given family that can provide a glyph for the
+ * requested codepoint closest to the style requested.
+ */
+rufl_code rufl_find_alternate_font_in_family(unsigned int u,
+		unsigned int current_font, rufl_style font_style,
+		unsigned int *font)
+{
+	struct rufl_family_map_entry_storage k;
+	const struct rufl_family_map_entry_storage *e;
+	const struct rufl_font_list_entry *f = &rufl_font_list[current_font];
+	unsigned int weight = (font_style & 0xf) - 1;
+	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
+
+	rufl_family_map_entry_populate(&k, f->family, weight, slant, 0);
+
+	/* Search for the closest font within the same family as the
+	 * current font that can provide a glyph for the specified codepoint */
+	e = rufl_family_map_find_closest_with_codepoint(&k, u);
+	if (e == NULL) {
+		*font = NOT_AVAILABLE;
+	} else {
+		rufl_family_map_entry_parse(e, NULL, NULL, NULL, font);
+	}
+
+	return rufl_OK;
+}
+
+/**
  * Given a Unicode codepoint and desired style, find substitute font with
    closest style.
  */
@@ -30,24 +58,19 @@ rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 	unsigned int font1, font2;
 	unsigned int weight = (font_style & 0xf) - 1;
 	unsigned int slant = (font_style & rufl_SLANTED) ? 1 : 0;
+	rufl_code code;
 
 	font1 = rufl_substitution_table_lookup(u);
 	if (font1 != NOT_AVAILABLE &&
-			(rufl_font_list[font1].weight != weight ||
+			 (rufl_font_list[font1].weight != weight ||
 			 rufl_font_list[font1].slant != slant)) {
 		/* seek closer match, placing final answer in font1 */
-		const char *font1_family;
-		struct rufl_character_set *charset;
-		rufl_code code;
-
-		font1_family = rufl_family_list[rufl_font_list[font1].family];
-		code = rufl_find_font_family(font1_family, font_style, &font2,
-				NULL, NULL, &charset);
-		if (code != rufl_OK)
-			return code;
-		if (font2 != font1 && charset &&
-				rufl_character_set_test(charset, u))
+		code = rufl_find_alternate_font_in_family(u, font1, font_style,
+				&font2);
+		if (code == rufl_OK && font2 != NOT_AVAILABLE &&
+				font2 != font1) {
 			font1 = font2;
+		}
 	}
 
 	*font = font1;

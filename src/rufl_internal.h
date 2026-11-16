@@ -235,6 +235,9 @@ struct rufl_family_map_entry_storage *
 		const struct rufl_family_map_entry_storage *k, uint32_t ucs4);
 rufl_code rufl_family_map_append(const struct rufl_family_map_entry_storage *e);
 
+rufl_code rufl_find_alternate_font_in_family(unsigned int u,
+		unsigned int current_font, rufl_style font_style,
+		unsigned int *font);
 rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 		unsigned int *font);
 rufl_code rufl_find_font_family(const char *family, rufl_style font_style,
