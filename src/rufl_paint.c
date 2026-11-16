@@ -156,6 +156,7 @@ rufl_code rufl_select_font_and_codepoint(unsigned int ucs4,
 		unsigned int *codepoint)
 {
 	const struct rufl_character_set *charset_preferred, *charset_current;
+	unsigned int font1;
 	rufl_code code = rufl_OK;
 
 	charset_preferred = (preferred_font == NOT_AVAILABLE)
@@ -168,6 +169,17 @@ rufl_code rufl_select_font_and_codepoint(unsigned int ucs4,
 	} else if (charset_preferred &&
 			rufl_character_set_test(charset_preferred, ucs4)) {
 		current_font = preferred_font;
+	} else if (0 && charset_preferred && (code =
+			rufl_find_alternate_font_in_family(ucs4, preferred_font,
+				font_style, &font1)) == rufl_OK &&
+			font1 != NOT_AVAILABLE) {
+		current_font = font1;
+	} else if (0 && current_font != preferred_font && charset_current &&
+			!rufl_character_set_test(charset_current, ucs4) &&
+			(code = rufl_find_alternate_font_in_family(ucs4,
+				current_font, font_style, &font1)) == rufl_OK &&
+			font1 != NOT_AVAILABLE) {
+		current_font = font1;
 	} else if (current_font == preferred_font || !charset_current ||
 			!rufl_character_set_test(charset_current, ucs4)) {
 		code = rufl_find_alternate_font(ucs4, font_style,
