@@ -245,6 +245,9 @@ struct rufl_family_map_entry_storage *rufl_family_map_find(
 		int (*cmpfunc)(const void *, const void *));
 struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		const struct rufl_family_map_entry_storage *k);
+struct rufl_family_map_entry_storage *
+		rufl_family_map_find_closest_with_codepoint(
+		const struct rufl_family_map_entry_storage *k, uint32_t ucs4);
 rufl_code rufl_family_map_append(const struct rufl_family_map_entry_storage *e);
 
 rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,

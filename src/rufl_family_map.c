@@ -10,10 +10,13 @@
 #include <stdlib.h>
 #include "rufl_internal.h"
 
-/** Size of rufl_family_map entries */
 enum {
+	/** Size of rufl_family_map entries */
 	rufl_FAMILY_MAP_8bit = 0,
-	rufl_FAMILY_MAP_16bit = (1 << 15)
+	rufl_FAMILY_MAP_16bit = (1 << 15),
+	/** Font variant flags */
+	rufl_FAMILY_MAP_VARIANT_SC = 0x4000,
+	rufl_FAMILY_MAP_VARIANT_MASK = 0x7000,
 };
 
 /** Base object for an entry in rufl_family_map */
@@ -21,11 +24,11 @@ struct rufl_family_map_entry_base {
 	/** Composite value, as follows:
 	 *
 	 *  b0    : slanted
-	 *  b1    : smallcaps
-	 *  b2-3  : reserved (0)
+	 *  b1-3  : reserved (0)
 	 *  b4-7  : weight
 	 *  b8-10 : glyph width
-	 *  b11-14: reserved (0)
+	 *  b11-13: reserved (0)
+	 *  b14   : smallcaps
 	 *  b15   : entry type (0 for 8bit; 1 for 16bit)
 	 */
 	uint16_t bits;
@@ -125,9 +128,9 @@ void rufl_family_map_entry_populate(struct rufl_family_map_entry_storage *e,
 	assert(family < rufl_family_list_entries);
 	assert(font < rufl_font_list_entries);
 
-	i->base.bits = (gwidth << 8)
+	i->base.bits = (smallcaps << 14)
+			| (gwidth << 8)
 			| (weight << 4)
-			| (smallcaps << 1)
 			| slanted;
 
 	if (rufl_family_list_entries > 256 || rufl_font_list_entries > 256) {
@@ -157,7 +160,7 @@ void rufl_family_map_entry_parse(const struct rufl_family_map_entry_storage *e,
 	if (slanted != NULL)
 		*slanted = i->base.bits & 0x1;
 	if (smallcaps != NULL)
-		*smallcaps = (i->base.bits >> 1) & 0x1;
+		*smallcaps = (i->base.bits >> 14) & 0x1;
 
 	if (i->base.bits & rufl_FAMILY_MAP_16bit) {
 		if (family != NULL)
@@ -254,26 +257,13 @@ struct rufl_family_map_entry_storage *rufl_family_map_find(
 }
 
 
-/**
- * Search for the closest entry in the rufl_family_map
- */
-struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
+static struct rufl_family_map_entry_storage *find_closest(
 		const struct rufl_family_map_entry_storage *k)
 {
-	struct rufl_family_map_entry_storage target;
+	struct rufl_family_map_entry_storage target = *k;
 	struct rufl_family_map_entry_storage *e, *best = NULL;
 	int best_distance;
-	uint32_t weight, pass;
-
-	/* Initialise target from client parameter, taking care to
-	 * copy only the amount of data guaranteed to be available. */
-	if (((struct rufl_family_map_entry_base *) k)->bits &
-			rufl_FAMILY_MAP_16bit) {
-		target = *k;
-	} else {
-		target.val1 = k->val1;
-		target.val2 = 0;
-	}
+	uint32_t weight, ncomponents;
 
 #ifdef FM_DEBUG
 	{
@@ -281,7 +271,7 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		rufl_family_map_entry_parse(&target, &tfam, &tw, &tgw,
 				&ts, &tsc, NULL);
 		printf("Want: %s %u %u %u %u\n", rufl_family_list[tfam],
-				tgw, tw, tsc, ts);
+				tsc, tgw, tw, ts);
 	}
 #endif
 
@@ -294,7 +284,7 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 	assert(e != NULL);
 
 	/* Try to improve the match. We perform a pass per component */
-	for (pass = 0; pass < 4; pass++) {
+	for (ncomponents = 4; ncomponents > 0; ncomponents--) {
 		if (best != NULL) {
 			uint32_t tfam, tgw, tw, tsc, ts;
 			uint32_t bgw, bw, bsc, bs;
@@ -312,18 +302,18 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 			 * previous pass. The order here *must* match
 			 * the order of the fields in "bits"; most
 			 * significant first. */
-			switch (pass) {
-			case 1:	tgw = bgw; break;
-			case 2:	tw = bw; break;
-			case 3:	tsc = bsc; break;
-			/* case 4: ts = bs; break; -- Never reached */
+			switch (ncomponents) {
+			case 3: tsc = bsc; break;
+			case 2:	tgw = bgw; break;
+			case 1:	tw = bw; break;
+			/* case 0: ts = bs; break; -- Never reached */
 			}
 
 #ifdef FM_DEBUG
 			{
 				printf("Adjusted target: %s %u %u %u %u\n",
 					rufl_family_list[tfam],
-					tgw, tw, tsc, ts);
+					tsc, tgw, tw, ts);
 			}
 #endif
 
@@ -338,7 +328,8 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 
 		/* Search away from the current item to find the
 		 * closest match to the target within the same family */
-		while (e != NULL && rufl_family_map_family_cmp(e, k) == 0) {
+		while (e != NULL && rufl_family_map_family_cmp(e,
+				&target) == 0) {
 			int d;
 
 			/* Compute distance to target */
@@ -351,17 +342,16 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 						&w, &gw, &s, &sc, &ft);
 
 				printf("%u: Considering: %s %u %u %u %u (%d)",
-						pass,
+						ncomponents,
 						rufl_font_list[ft].identifier,
-						gw, w, sc, s, d);
+						sc, gw, w, s, d);
 				if (best != NULL) {
 					uint32_t bft, bgw, bw, bsc, bs;
 					rufl_family_map_entry_parse(best, NULL,
 						&bw, &bgw, &bs, &bsc, &bft);
 					printf(" Best: %s %u %u %u %u (%d)",
 						rufl_font_list[bft].identifier,
-						bgw, bw, bsc, bs,
-						best_distance);
+						bsc,bgw, bw, bs, best_distance);
 				}
 				printf("\n");
 			}
@@ -407,11 +397,132 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		uint32_t ft, gw, w, sc, s;
 		rufl_family_map_entry_parse(best, NULL, &w, &gw, &s, &sc, &ft);
 		printf("Chose: %s %u %u %u %u\n", rufl_font_list[ft].identifier,
-				gw, w, sc, s);
+				sc, gw, w, s);
 	}
 #endif
 
 	return best;
+}
+
+
+/**
+ * Search for the closest entry in the rufl_family_map
+ */
+struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
+		const struct rufl_family_map_entry_storage *k)
+{
+	struct rufl_family_map_entry_storage target;
+	struct rufl_family_map_entry_storage *e = &target;
+
+	/* Initialise target from client parameter, taking care to
+	 * copy only the amount of data guaranteed to be available. */
+	if (((struct rufl_family_map_entry_base *) k)->bits &
+			rufl_FAMILY_MAP_16bit) {
+		target = *k;
+	} else {
+		target.val1 = k->val1;
+		target.val2 = 0;
+	}
+	/* Neutralise bits that can never be searched for via this API */
+	((struct rufl_family_map_entry_base *) e)->bits &=
+			~rufl_FAMILY_MAP_VARIANT_MASK;
+
+	e = find_closest(&target);
+	if (e != NULL && ((struct rufl_family_map_entry_base *) e)->bits &
+			rufl_FAMILY_MAP_VARIANT_MASK) {
+		/* Closest match has a variant bit set: reject it */
+		e = NULL;
+	}
+	return e;
+}
+
+
+/**
+ * Search for the closest entry in the rufl_family_map with a glyph for the
+ * specified codepoint
+ */
+struct rufl_family_map_entry_storage *
+rufl_family_map_find_closest_with_codepoint(
+		const struct rufl_family_map_entry_storage *k, uint32_t ucs4)
+{
+	struct rufl_family_map_entry_storage target;
+	struct rufl_family_map_entry_storage *e, *e1 = &target;
+
+	/* Initialise target from client parameter, taking care to
+	 * copy only the amount of data guaranteed to be available. */
+	if (((struct rufl_family_map_entry_base *) k)->bits &
+			rufl_FAMILY_MAP_16bit) {
+		target = *k;
+	} else {
+		target.val1 = k->val1;
+		target.val2 = 0;
+	}
+	/* Clear client-provided variant bits, which cannot have effect here. */
+	((struct rufl_family_map_entry_base *) e1)->bits &=
+			~rufl_FAMILY_MAP_VARIANT_MASK;
+
+	/* Try without variant */
+	e = find_closest(&target);
+	if (e != NULL) {
+		const struct rufl_font_list_entry *f;
+		unsigned int font;
+
+		rufl_family_map_entry_parse(e, NULL, NULL, NULL, NULL, NULL,
+				&font);
+
+		f = &rufl_font_list[font];
+
+		if (f->charset == NULL || !rufl_character_set_test(f->charset,
+				ucs4)) {
+			/* Chosen entry has no glyph for the codepoint */
+			e = NULL;
+		}
+	}
+
+	/* Try variants */
+	((struct rufl_family_map_entry_base *) e1)->bits |=
+			rufl_FAMILY_MAP_VARIANT_SC;
+	e1 = find_closest(&target);
+	if (e1 != NULL) {
+		const struct rufl_font_list_entry *f;
+		unsigned int font;
+
+		rufl_family_map_entry_parse(e1, NULL, NULL, NULL, NULL, NULL,
+				&font);
+
+		f = &rufl_font_list[font];
+
+		if (f->charset == NULL || !rufl_character_set_test(f->charset,
+				ucs4)) {
+			/* Chosen entry has no glyph for the codepoint */
+			e1 = NULL;
+		}
+	}
+
+	/* Return the closest of the options we have */
+	if (e != NULL && e1 != NULL) {
+		struct rufl_family_map_entry_storage norm;
+		struct rufl_family_map_entry_storage *e1n = &norm;
+		int d, d1;
+
+		norm.val1 = e1->val1;
+		norm.val2 = 0;
+		((struct rufl_family_map_entry_base *) e1n)->bits &=
+				~rufl_FAMILY_MAP_VARIANT_MASK;
+
+		d = rufl_family_map_cmp(e, &target);
+
+		d1 = rufl_family_map_cmp(e1n, &target);
+
+		/* Prefer non-variant font if identical distance from target */
+		if (abs(d1) < abs(d)) {
+			e = e1;
+		}
+	} else if (e1 != NULL) {
+		e = e1;
+	}
+
+	return e;
 }
 
 
