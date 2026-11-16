@@ -225,6 +225,11 @@ rufl_code rufl_find_font(unsigned int font, unsigned int font_size,
 bool rufl_character_set_test(const struct rufl_character_set *charset,
 		uint32_t u);
 
+rufl_code rufl_select_font_and_codepoint(unsigned int ucs4,
+		unsigned int preferred_font, unsigned int current_font,
+		rufl_style font_style, unsigned int *selected_font,
+		unsigned int *codepoint);
+
 rufl_code rufl_substitution_table_init(void);
 void rufl_substitution_table_fini(void);
 unsigned int rufl_substitution_table_lookup(uint32_t u);

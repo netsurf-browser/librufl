@@ -150,7 +150,7 @@ rufl_code rufl_font_bbox(const char *font_family, rufl_style font_style,
 }
 
 
-static rufl_code select_font_and_codepoint(unsigned int ucs4,
+rufl_code rufl_select_font_and_codepoint(unsigned int ucs4,
 		unsigned int preferred_font, unsigned int current_font,
 		rufl_style font_style, unsigned int *selected_font,
 		unsigned int *codepoint)
@@ -257,8 +257,8 @@ rufl_code rufl_process(rufl_action action,
 
 	offset_u = 0;
 	rufl_utf8_read(string, length, u);
-	code = select_font_and_codepoint(u, font, NOT_AVAILABLE, style, &font1,
-		&u);
+	code = rufl_select_font_and_codepoint(u, font, NOT_AVAILABLE, style,
+			&font1, &u);
 	if (code != rufl_OK)
 		return code;
 
@@ -271,7 +271,7 @@ rufl_code rufl_process(rufl_action action,
 		while (0 < length && n < rufl_PROCESS_CHUNK && font1 == font0) {
 			offset_u = string - string0;
 			rufl_utf8_read(string, length, u);
-			code = select_font_and_codepoint(u, font, font0,
+			code = rufl_select_font_and_codepoint(u, font, font0,
 					style, &font1, &u);
 			if (code != rufl_OK)
 				return code;

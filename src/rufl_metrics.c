@@ -139,15 +139,13 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 		return code;
 
 	rufl_utf8_read(ustring, length, u);
-	if (charset && rufl_character_set_test(charset, u))
-		font1 = font;
-	else {
-		code = rufl_find_alternate_font(u, style, &font1);
-		if (code != rufl_OK)
-			return code;
-		if (font1 == NOT_AVAILABLE)
-			font1 = rufl_CACHE_CORPUS;
-	}
+
+	code = rufl_select_font_and_codepoint(u, font, NOT_AVAILABLE, style,
+			&font1, &u);
+	if (code != rufl_OK)
+		return code;
+	if (font1 == NOT_AVAILABLE)
+		font1 = rufl_CACHE_CORPUS;
 
 	/* Old font managers need the font encoding, too */
 	if (rufl_old_font_manager && font1 != rufl_CACHE_CORPUS) {
