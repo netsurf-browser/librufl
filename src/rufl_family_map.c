@@ -411,7 +411,7 @@ static struct rufl_family_map_entry_storage *find_closest(
 struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		const struct rufl_family_map_entry_storage *k)
 {
-	struct rufl_family_map_entry_storage target;
+	struct rufl_family_map_entry_storage target = {0};
 	struct rufl_family_map_entry_storage *e = &target;
 
 	/* Initialise target from client parameter, taking care to
@@ -445,7 +445,7 @@ struct rufl_family_map_entry_storage *
 rufl_family_map_find_closest_with_codepoint(
 		const struct rufl_family_map_entry_storage *k, uint32_t ucs4)
 {
-	struct rufl_family_map_entry_storage target;
+	struct rufl_family_map_entry_storage target = {0};
 	struct rufl_family_map_entry_storage *e, *e1 = &target;
 
 	/* Initialise target from client parameter, taking care to
@@ -501,7 +501,7 @@ rufl_family_map_find_closest_with_codepoint(
 
 	/* Return the closest of the options we have */
 	if (e != NULL && e1 != NULL) {
-		struct rufl_family_map_entry_storage norm;
+		struct rufl_family_map_entry_storage norm = {0};
 		struct rufl_family_map_entry_storage *e1n = &norm;
 		int d, d1;
 
