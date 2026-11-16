@@ -307,6 +307,7 @@ rufl_code rufl_process(rufl_action action,
 	size_t offset_u;
 	size_t offset_map[rufl_PROCESS_CHUNK];
 	unsigned int slant;
+	rufl_style style;
 	const uint8_t *string = string0;
 	rufl_code code;
 
@@ -341,7 +342,7 @@ rufl_code rufl_process(rufl_action action,
 	}
 
 	code = rufl_find_font_family(font_family, font_style,
-			&font, &slant, NULL);
+			&font, &style, &slant, NULL);
 	if (code != rufl_OK)
 		return code;
 
@@ -359,8 +360,8 @@ rufl_code rufl_process(rufl_action action,
 
 	offset_u = 0;
 	rufl_utf8_read(string, length, u);
-	code = select_font_and_codepoint(u, font, NOT_AVAILABLE, font_style,
-			&font1, &u);
+	code = select_font_and_codepoint(u, font, NOT_AVAILABLE, style, &font1,
+		       &u);
 	if (code != rufl_OK)
 		return code;
 
@@ -373,8 +374,8 @@ rufl_code rufl_process(rufl_action action,
 		while (0 < length && n < rufl_PROCESS_CHUNK && font1 == font0) {
 			offset_u = string - string0;
 			rufl_utf8_read(string, length, u);
-			code = select_font_and_codepoint(u, font, font0,
-					font_style, &font1, &u);
+			code = select_font_and_codepoint(u, font, font0, style,
+				       &font1, &u);
 			if (code != rufl_OK)
 				return code;
 			s[n] = u;

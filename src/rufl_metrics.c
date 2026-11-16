@@ -31,7 +31,7 @@ rufl_code rufl_font_metrics(const char *font_family, rufl_style font_style,
 	rufl_code code;
 
 	code = rufl_find_font_family(font_family, font_style, &font,
-			NULL, NULL);
+			NULL, NULL, NULL);
 	if (code != rufl_OK)
 		return code;
 
@@ -126,6 +126,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	struct rufl_character_set *charset;
 	struct rufl_unicode_map_entry *umap_entry = NULL;
 	font_f f;
+	rufl_style style;
 	rufl_code code;
 	font_scan_block block;
 	font_string_flags flags;
@@ -133,7 +134,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 
 	/* Find font family containing glyph */
 	code = rufl_find_font_family(font_family, font_style,
-			&font, NULL, &charset);
+			&font, &style, NULL, &charset);
 	if (code != rufl_OK)
 		return code;
 
@@ -141,7 +142,7 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 	if (charset && rufl_character_set_test(charset, u))
 		font1 = font;
 	else {
-		code = rufl_find_alternate_font(u, font_style, &font1);
+		code = rufl_find_alternate_font(u, style, &font1);
 		if (code != rufl_OK)
 			return code;
 		if (font1 == NOT_AVAILABLE)

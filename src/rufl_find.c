@@ -88,7 +88,7 @@ rufl_code rufl_find_alternate_font(unsigned int u, rufl_style font_style,
 }
 
 static rufl_code rufl_find_font_family_by_identifier(const char *font_family,
-		unsigned int *font)
+		unsigned int *font, rufl_style *font_style)
 {
 	/* "font_family" contains a font identifier: direct lookup */
 	const struct rufl_font_list_entry *fe;
@@ -113,6 +113,11 @@ static rufl_code rufl_find_font_family_by_identifier(const char *font_family,
 		return rufl_FONT_NOT_FOUND;
 
 	*font = fe - rufl_font_list;
+	/* Manufacture the font_style implied by this font */
+	*font_style = (fe->smallcaps ? rufl_FLAG_CAPS : 0) |
+		(fe->slant ? rufl_FLAG_SLANTED : 0) |
+		((fe->gwidth + 1) << 4) |
+		(fe->weight + 1);
 
 	return rufl_OK;
 }
@@ -168,16 +173,19 @@ static rufl_code rufl_find_font_family_by_family_and_style(
  */
 rufl_code rufl_find_font_family(const char *font_family,
 		rufl_style font_style, unsigned int *font,
-		unsigned int *slanted, struct rufl_character_set **charset)
+		rufl_style *effective_style, unsigned int *slanted,
+		struct rufl_character_set **charset)
 {
 	unsigned int f;
+	rufl_style style = font_style;
 	rufl_code code;
 
 	if (!font_family)
 		return rufl_FONT_NOT_FOUND;
 
 	if (*font_family == '\\') {
-		code = rufl_find_font_family_by_identifier(font_family, &f);
+		code = rufl_find_font_family_by_identifier(font_family, &f,
+				&style);
 	} else {
 		code = rufl_find_font_family_by_family_and_style(font_family,
 				font_style, &f);
@@ -187,6 +195,9 @@ rufl_code rufl_find_font_family(const char *font_family,
 
 	if (font)
 		(*font) = f;
+
+	if (effective_style)
+		(*effective_style) = style;
 
 	if (slanted)
 		(*slanted) = rufl_font_list[f].slant;
