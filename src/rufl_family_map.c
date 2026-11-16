@@ -240,10 +240,7 @@ struct rufl_family_map_entry_storage *rufl_family_map_find(
 }
 
 
-/**
- * Search for the closest entry in the rufl_family_map
- */
-struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
+static struct rufl_family_map_entry_storage *find_closest(
 		const struct rufl_family_map_entry_storage *k)
 {
 	struct rufl_family_map_entry_storage *e, *best = NULL;
@@ -318,6 +315,46 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 	}
 
 	return best;
+}
+
+
+/**
+ * Search for the closest entry in the rufl_family_map
+ */
+struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
+		const struct rufl_family_map_entry_storage *k)
+{
+	return find_closest(k);
+}
+
+
+/**
+ * Search for the closest entry in the rufl_family_map with a glyph for the
+ * specified codepoint
+ */
+struct rufl_family_map_entry_storage *
+rufl_family_map_find_closest_with_codepoint(
+		const struct rufl_family_map_entry_storage *k, uint32_t ucs4)
+{
+	struct rufl_family_map_entry_storage *e;
+
+	e = find_closest(k);
+	if (e != NULL) {
+		const struct rufl_font_list_entry *f;
+		unsigned int font;
+
+		rufl_family_map_entry_parse(e, NULL, NULL, NULL, &font);
+
+		f = &rufl_font_list[font];
+
+		if (f->charset == NULL || !rufl_character_set_test(f->charset,
+				ucs4)) {
+			/* Chosen entry has no glyph for the codepoint */
+			e = NULL;
+		}
+	}
+
+	return e;
 }
 
 
