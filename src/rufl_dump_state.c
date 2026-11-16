@@ -77,8 +77,8 @@ void rufl_dump_state(bool verbose)
 					&font);
 
 			/* The data is sparse: embrace it */
-			printf("    gw: %u w: %u s: %u sc: %u \"%s\"\n",
-					(gw + 1) * 100, (w + 1) * 100, s, sc,
+			printf("    sc: %u gw: %u w: %u s: %u \"%s\"\n",
+					sc, (gw + 1) * 100, (w + 1) * 100, s,
 					rufl_font_list[font].identifier);
 
 			e = next;
