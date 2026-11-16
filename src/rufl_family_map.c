@@ -424,7 +424,7 @@ struct rufl_family_map_entry_storage *rufl_family_map_find_closest(
 		target.val2 = 0;
 	}
 	/* Neutralise bits that can never be searched for via this API */
-	((struct rufl_family_map_entry_base *) e)->bits &=
+	((struct rufl_family_map_entry *) e)->base.bits &=
 			~rufl_FAMILY_MAP_VARIANT_MASK;
 
 	e = find_closest(&target);
@@ -458,7 +458,7 @@ rufl_family_map_find_closest_with_codepoint(
 		target.val2 = 0;
 	}
 	/* Clear client-provided variant bits, which cannot have effect here. */
-	((struct rufl_family_map_entry_base *) e1)->bits &=
+	((struct rufl_family_map_entry *) e1)->base.bits &=
 			~rufl_FAMILY_MAP_VARIANT_MASK;
 
 	/* Try without variant */
@@ -507,7 +507,7 @@ rufl_family_map_find_closest_with_codepoint(
 
 		norm.val1 = e1->val1;
 		norm.val2 = 0;
-		((struct rufl_family_map_entry_base *) e1n)->bits &=
+		((struct rufl_family_map_entry *) e1n)->base.bits &=
 				~rufl_FAMILY_MAP_VARIANT_MASK;
 
 		d = rufl_family_map_cmp(e, &target);
