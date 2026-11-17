@@ -256,6 +256,14 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 
 		/* We found the correct umap entry when 
 		 * looking for the font encoding */
+		if (umap_entry == NULL) {
+			/* This cannot happen, but static analysis tools
+			 * that hallucinate rufl_old_font_manager changing
+			 * underneath us (it can't) get confused. So check
+			 * that the impossible cannot happen. */
+			assert(0);
+			return rufl_OUT_OF_MEMORY;
+		}
 		s[0] = umap_entry->c;
 		s[1] = 0;
 
