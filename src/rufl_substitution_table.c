@@ -502,10 +502,13 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 		subst_table->table[i] = t64[i] & 0xffffffffu;
 	}
 
-	/* Shrink the table to its final size. If this fails, leave
-	 * the existing data intact as it's correct -- we just have
-	 * twice the storage usage we need. */
-	table = realloc(t64, range * sizeof(*subst_table->table));
+	/* Shrink the table to its final size (being an array of
+	 * 32bit values with "range" entries). However, to avoid
+	 * confusing the likes of scan-build, we express this as
+	 * an allocation of "range"/2 64bit entries (rounding up).
+	 * If this fails, leave the existing data intact as it's
+	 * correct -- we just have twice the storage usage we need. */
+	table = realloc(t64, ((range + 1) & ~1) * sizeof(*t64));
 	if (table)
 		subst_table->table = (uint32_t *) table;
 
