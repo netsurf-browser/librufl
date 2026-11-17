@@ -121,6 +121,13 @@ struct rufl_unicode_map {
 	struct rufl_unicode_map_entry map[256];
 };
 
+/** Typeface style of a font */
+typedef enum {
+	rufl_FACE_STYLE_MONOSPACE = 0,
+	rufl_FACE_STYLE_SANS_SERIF,
+	rufl_FACE_STYLE_SERIF,
+} rufl_face_style;
+
 /** Font Manager font type */
 typedef enum {
 	/* These values are structured such that:
@@ -140,6 +147,8 @@ typedef enum {
 	rufl_FM_FONT_TYPE_SYMBOL_NO_ENCODING,
 	rufl_FM_FONT_TYPE_SYMBOL_WITH_ENCODING,
 } rufl_fm_font_type;
+#define rufl_FM_FONT_TYPE_IS_SYMBOL(t) (t & 0x10)
+#define rufl_FM_FONT_TYPE_HAS_ENCODING(t) (t & 0x01)
 
 /** An entry in rufl_font_list. */
 struct rufl_font_list_entry {
@@ -156,8 +165,14 @@ struct rufl_font_list_entry {
 	uint32_t family: 16;
 	/** Font weight (0 to 8). */
 	uint32_t weight: 4;
+	/** Font glyph width (0 to 4). */
+	uint32_t gwidth: 3;
 	/** Font slant (0 or 1). */
 	uint32_t slant: 1;
+	/** Font smallcaps (0 or 1). */
+	uint32_t smallcaps: 1;
+	/** Font typeface style (0 to 2) c.f. rufl_face_style */
+	uint32_t face_style : 2;
 	/** Font Manager font type (0 to 3) c.f rufl_fm_font_type */
 	uint32_t fm_type : 2;
 	/* Whether the identifier has components unknown to RUfl (0 or 1) */
@@ -216,11 +231,11 @@ extern bool rufl_can_background_blend;
 int rufl_family_map_cmp(const void *e1, const void *e2);
 int rufl_family_map_family_cmp(const void *e1, const void *e2);
 void rufl_family_map_entry_populate(struct rufl_family_map_entry_storage *e,
-		uint32_t family, uint32_t weight, uint32_t slanted,
-		uint32_t font);
+		uint32_t family, uint32_t weight, uint32_t gwidth,
+		uint32_t slanted, uint32_t smallcaps, uint32_t font);
 void rufl_family_map_entry_parse(const struct rufl_family_map_entry_storage *e,
-		uint32_t *family, uint32_t *weight, uint32_t *slanted,
-		uint32_t *font);
+		uint32_t *family, uint32_t *weight, uint32_t *gwidth,
+		uint32_t *slanted, uint32_t *smallcaps, uint32_t *font);
 struct rufl_family_map_entry_storage *rufl_family_map_prev(
 		const struct rufl_family_map_entry_storage *e);
 struct rufl_family_map_entry_storage *rufl_family_map_next(
@@ -300,6 +315,36 @@ struct rufl_glyph_map_entry {
 
 extern const struct rufl_glyph_map_entry rufl_glyph_map[];
 extern const size_t rufl_glyph_map_size;
+
+
+/** Type of a rufl_pua_map entry. This may look like a bitfield but isn't */
+typedef enum {
+	rufl_PUA_TYPE_CAP   = 0x01,
+	rufl_PUA_TYPE_DENOM = 0x02,
+	rufl_PUA_TYPE_FONT  = 0x04,
+	rufl_PUA_TYPE_NUMER = 0x08,
+	rufl_PUA_TYPE_OSF   = 0x10,
+	rufl_PUA_TYPE_SUB   = 0x20,
+	rufl_PUA_TYPE_SUPER = 0x40,
+	rufl_PUA_TYPE_SC    = 0x80,
+} rufl_pua_type;
+
+struct rufl_pua_map_entry {
+	/* The PUA map contains codepoints in the BMP only. */
+	uint16_t type; /** Entry type (c.f. rufl_pua_type) */
+	uint16_t u; /** Standardised codepoint */
+	uint16_t p; /** PUA codepoint */
+};
+/** Map from standardised codepoint and type to assignment in the
+ * Private Use Area.
+ *
+ * The map is sorted by the tuple of (type, standardised codepoint).
+ * There may be multiple entries per key.
+ *
+ * This permits selection of glyphic variants where appropriate to do so. */
+extern const struct rufl_pua_map_entry rufl_pua_map[];
+extern const size_t rufl_pua_map_size;
+int rufl_pua_map_entry_cmp(const void *keyval, const void *datum);
 
 
 #if 1 /*ndef NDEBUG*/

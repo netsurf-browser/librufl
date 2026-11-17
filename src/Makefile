@@ -8,10 +8,14 @@ ifeq ($(toolchain),norcroft)
   DIR_SOURCES := $(DIR_SOURCES) strfuncs.c
 endif
 
-SOURCES := $(SOURCES) $(BUILDDIR)/rufl_glyph_map.c
+SOURCES := $(SOURCES) $(BUILDDIR)/rufl_glyph_map.c $(BUILDDIR)/rufl_pua_map.c
 
 $(BUILDDIR)/rufl_glyph_map.c: src/Glyphs
 	$(VQ)$(ECHO) "MKGLYPHS: $<"
 	$(Q)$(PERL) tools/makeglyphs < $< > $@
+
+$(BUILDDIR)/rufl_pua_map.c: src/CorporateUse
+	$(VQ)$(ECHO) "MKPUAMAP: $<"
+	$(Q)$(PERL) tools/makepuamap < $< > $@
 
 include $(NSBUILD)/Makefile.subdir

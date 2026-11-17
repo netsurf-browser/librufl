@@ -239,11 +239,33 @@ static char *unescape(char *p) {
 static rufl_style style_from_string(const char *s)
 {
 	char *end;
-	uint32_t val = strtoul(s, &end, 10);
+	uint32_t weight = strtoul(s, &end, 10);
+	uint32_t gwidth = 300;
+	uint32_t slant = 0;
+	uint32_t smallcaps = 0;
 
-	assert(100 <= val && val <= 900 && val % 100 == 0);
+	/* [ <gwidth> 'w' ]? <weight> '/'? 'C'? */
+	if (*end == 'w') {
+		gwidth = weight;
+		weight = strtoul(end+1, &end, 10);
+	}
 
-	return (rufl_style) ((val / 100) | (*end == '/' ? rufl_SLANTED : 0));
+	if (*end == '/') {
+		slant = rufl_FLAG_SLANTED;
+		end++;
+	}
+
+	if (*end == 'C') {
+		smallcaps = rufl_FLAG_CAPS;
+		end++;
+	}
+
+	assert(*end == '\0');
+	assert(100 <= gwidth && gwidth <= 500 && gwidth % 100 == 0);
+	assert(100 <= weight && weight <= 900 && weight % 100 == 0);
+
+	return (rufl_style) ((gwidth / 100) << 4 | (weight / 100) |
+			smallcaps | slant);
 }
 
 static void parse_testcase(struct cfg *cfg, char *data, size_t len)
@@ -600,6 +622,9 @@ int main(int argc, const char **argv)
 		int x = 0;
 		size_t e;
 
+		printf("Test %zu - %s %08x '%s'\n", i + 1,
+				tc->fontname, tc->style, tc->input);
+
 		rufl_test_harness_discard_paint_calls();
 
 		assert(rufl_OK == rufl_paint(tc->fontname, tc->style,
@@ -608,6 +633,10 @@ int main(int argc, const char **argv)
 		for (e = 0; e < tc->n_expect; e++) {
 			rufl_test_harness_paint_call ecall;
 			const struct expectation *exp = &tc->expect[e];
+
+			printf("  Expect %s (%s) (%d,%d) '%s'\n",
+					exp->fontname, exp->encoding,
+					x, 0, exp->text);
 
 			ecall.font.name = exp->fontname;
 			if (strcmp(exp->encoding, "Symbol") == 0)

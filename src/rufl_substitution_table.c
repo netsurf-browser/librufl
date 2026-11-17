@@ -873,17 +873,92 @@ static size_t rufl_substitution_table_estimate_size_direct(size_t table_entries,
 
 /****************************************************************************/
 
+static uint8_t filter_block(const struct rufl_font_list_entry *f,
+		uint32_t plane, const struct rufl_character_set *charset,
+		uint32_t block, uint8_t bitmap[32])
+{
+	uint8_t result;
+
+	if (charset->index[block] == BLOCK_EMPTY) {
+		/* Block is empty, so there is nothing to filter */
+		result = BLOCK_EMPTY;
+	} else if (plane == 0 && f->smallcaps &&
+			!rufl_FM_FONT_TYPE_HAS_ENCODING(f->fm_type)) {
+		/* BMP codepoint and small caps font variant without an
+		 * explicit encoding (or using /Base0 which we know
+		 * doesn't map any glyphs into the small caps PUA codepoints):
+		 * filter out any codepoints that have entries in the PUA map.
+		 *
+		 * This prevents the use of this font to provide substitute
+		 * glyphs for those standardised codepoints which, in this
+		 * font, may be represented as smallcaps. We are happy,
+		 * however, for this font to provide the smallcaps glyphs
+		 * corresponding to the non-standardised PUA codepoint values.
+		 */
+		uint32_t ucs4;
+		uint8_t all = 0xff, any = 0;
+
+		if (charset->index[block] == BLOCK_FULL) {
+			/* Block is full: synthesise the filled bitmap */
+			memset(bitmap, 0xff, 32);
+		} else {
+			/* Otherwise: initialise from unfiltered bitmap */
+			memcpy(bitmap, charset->block[charset->index[block]],
+					32);
+		}
+
+		/* Filter out any standard codepoint that might have a
+		 * smallcaps variant. */
+		for (ucs4 = block * 256; ucs4 < (block + 1) * 256; ucs4++) {
+			struct rufl_pua_map_entry k = {
+				rufl_PUA_TYPE_SC, ucs4, 0
+			};
+			struct rufl_pua_map_entry *entry;
+			entry = bsearch(&k, rufl_pua_map, rufl_pua_map_size,
+					sizeof rufl_pua_map[0],
+					rufl_pua_map_entry_cmp);
+			if (entry) {
+				const unsigned int byte = (ucs4 >> 3) & 31;
+				const unsigned int bit = ucs4 & 7;
+				bitmap[byte] &= ~(1 << bit);
+			}
+		}
+
+		/* Determine if the filtered block remains full, is empty,
+		 * or is neither */
+		for (ucs4 = 0; ucs4 < 32; ucs4++) {
+			all &= bitmap[ucs4];
+			any |= bitmap[ucs4];
+		}
+
+		result = (all == 0xff) ? BLOCK_FULL :
+				(any == 0) ? BLOCK_EMPTY : 0;
+	} else if (charset->index[block] == BLOCK_FULL) {
+		/* Block is full */
+		result = BLOCK_FULL;
+	} else {
+		/* Block is not full, but unfiltered */
+		memcpy(bitmap, charset->block[charset->index[block]], 32);
+		result = 0;
+	}
+
+	return result;
+}
+
 /**
  * Populate the substitution map for a given block
  */
-static void fill_map_for_block(const struct rufl_character_set **charsets,
-		uint32_t block, uint16_t map_for_block[256])
+static void fill_map_for_block(uint32_t plane,
+		const struct rufl_character_set **charsets, uint32_t block,
+		uint16_t map_for_block[256])
 {
 	unsigned int i, u, v;
 	/* Records the maximum number of characters sourced from a single
 	   font for each sub-block of 16 characters. */
 #define SUB_BLOCK_SIZE 16
 	uint8_t sub_block_count[SUB_BLOCK_SIZE];
+	uint8_t bitmap[32];
+	uint8_t filter_result;
 
 	/* Sub-block size must be a power of 2 between [8, 256] */
 	assert(8 <= SUB_BLOCK_SIZE && SUB_BLOCK_SIZE <= 256);
@@ -895,15 +970,17 @@ static void fill_map_for_block(const struct rufl_character_set **charsets,
 		if (!charsets[i])
 			continue;
 
-		if (charsets[i]->index[block] == BLOCK_FULL) {
+		filter_result = filter_block(&rufl_font_list[i], plane,
+				charsets[i], block, bitmap);
+
+		if (filter_result == BLOCK_FULL) {
 			/* If this font covers the whole block, use it in
 			   preference to bits of several different fonts. */
 			for (u = 0; u != 256; u++)
 				map_for_block[u] = i;
 			return;
-		} else if (charsets[i]->index[block] != BLOCK_EMPTY) {
-			const uint8_t *blk = charsets[i]->block[
-					charsets[i]->index[block]];
+		} else if (filter_result != BLOCK_EMPTY) {
+			const uint8_t *blk = bitmap;
 			for (u = 0; u != 256; u += SUB_BLOCK_SIZE) {
 				unsigned int n = 0;
 
@@ -1031,7 +1108,7 @@ static rufl_code create_substitution_table_for_plane(unsigned int plane)
 		for (i = 0; i != 256; i++)
 			map_for_block[i] = NOT_AVAILABLE;
 
-		fill_map_for_block(charsets, block, map_for_block);
+		fill_map_for_block(plane, charsets, block, map_for_block);
 
 		/* Merge block map into table */
 		for (i = 0; i != 256; i++) {
