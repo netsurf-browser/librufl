@@ -1918,6 +1918,7 @@ rufl_code rufl_load_cache(void)
 			else
 				LOG("fread: 0x%x: %s", errno, strerror(errno));
 			free(identifier);
+			identifier = NULL;
 			break;
 		}
 		identifier[len] = 0;
@@ -1931,6 +1932,7 @@ rufl_code rufl_load_cache(void)
 					LOG("fread: 0x%x: %s",
 							errno, strerror(errno));
 				free(identifier);
+				identifier = NULL;
 				break;
 			}
 
@@ -1965,7 +1967,9 @@ rufl_code rufl_load_cache(void)
 					LOG("fread: 0x%x: %s",
 							errno, strerror(errno));
 				free(charset);
+				charset = NULL;
 				free(identifier);
+				identifier = NULL;
 				break;
 			}
 		} while(EXTENSION_FOLLOWS(cur_charset->metadata));
@@ -1983,7 +1987,9 @@ rufl_code rufl_load_cache(void)
 					LOG("fread: 0x%x: %s", errno,
 							strerror(errno));
 				free(charset);
+				charset = NULL;
 				free(identifier);
+				identifier = NULL;
 				break;
 			}
 
@@ -1991,7 +1997,9 @@ rufl_code rufl_load_cache(void)
 			if (!umap) {
 				LOG("malloc(%zu) failed", sizeof *umap);
 				free(charset);
+				charset = NULL;
 				free(identifier);
+				identifier = NULL;
 				fclose(fp);
 				return rufl_OUT_OF_MEMORY;
 			}
@@ -2067,8 +2075,11 @@ rufl_code rufl_load_cache(void)
 					free(map->encoding);
 				}
 				free(umap);
+				umap = NULL;
 				free(charset);
+				charset = NULL;
 				free(identifier);
+				identifier = NULL;
 
 				if (code != rufl_OK)
 					return code;
@@ -2078,9 +2089,13 @@ rufl_code rufl_load_cache(void)
 		}
 
 		/* put in rufl_font_list */
-		entry = bsearch(identifier, rufl_font_list,
-				rufl_font_list_entries,
-				sizeof rufl_font_list[0], rufl_font_list_cmp);
+		entry = NULL;
+		if (identifier) {
+			entry = bsearch(identifier, rufl_font_list,
+					rufl_font_list_entries,
+					sizeof rufl_font_list[0],
+					rufl_font_list_cmp);
+		}
 		if (entry) {
 			entry->charset = charset;
 			entry->umap = umap;
@@ -2100,10 +2115,12 @@ rufl_code rufl_load_cache(void)
 			free(charset);
 		}
 
+		umap = NULL;
 		charset = NULL;
 		size = 0;
 
 		free(identifier);
+		identifier = NULL;
 	}
 	fclose(fp);
 
