@@ -508,7 +508,7 @@ static rufl_code create_substitution_table_chd(uint64_t *table,
 	 * an allocation of "range"/2 64bit entries (rounding up).
 	 * If this fails, leave the existing data intact as it's
 	 * correct -- we just have twice the storage usage we need. */
-	table = realloc(t64, ((range + 1) & ~1) * sizeof(*t64));
+	table = realloc(t64, ((range + 1) / 2) * sizeof(*t64));
 	if (table)
 		subst_table->table = (uint32_t *) table;
 
