@@ -496,6 +496,8 @@ rufl_code rufl_process_span_old(rufl_action action,
 		}
 		assert(map != NULL);
 		assert(entry != NULL);
+		if (map == NULL || entry == NULL)
+			return rufl_OUT_OF_MEMORY;
 
 		/* Collect characters: s[0..i) use map */
 		do {
