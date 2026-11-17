@@ -166,6 +166,8 @@ rufl_code rufl_glyph_metrics(const char *font_family,
 		}
 
 		assert(umap_entry != NULL);
+		if (umap_entry == NULL)
+			return rufl_OUT_OF_MEMORY;
 	}
 
 	code = rufl_find_font(font1, font_size, font_encoding, &f);
